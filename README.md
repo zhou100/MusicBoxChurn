@@ -1,41 +1,35 @@
 # Capstone Project Report: Music Box Churn Prediction
 
-1. Project Summary
+## 1. Project Summary
 
-This project is to use music box log data to predict churn, including information on songs
-played, user profile, searching activities. This project builds a demo for analyzing large user record level data and analyze user behaviors.
+This project is to use music box log data to predict churn, including information on songs played, user profile, searching activities. This project builds a demo for analyzing large user record level data and analyze user behaviors.
 
-Churn is defined by inactivity in fixed 14 days window. It is predicted using the users' behavior pattern in a 30 day window before that 14 day window.
-Churn prediction is an important operation problem. Effective targeting of those who might churn and act earlier is crucial to keep the product's core
-users. As such, features are generated from the log file, including the frequency,
-recency of events, total playing time, songs fully played and other playing behaviors such as the mean and Standard deviation of song playing time.
-Machine learning models, such as random forest, gradient boosting and Logistic regression are applied on the training data to predict
-the test data set.
+Churn is defined by inactivity in fixed 14 days window. It is predicted using the users' behavior pattern in a 30 day window before that 14 day window. 
 
-The end churn prediction accuracy is around 0.92 on the training and 0.91 on the testing data set, which is 14% more than the 80% baseline.
-Variables that explain most of the variation is recency in a 30 days windows, total playing time in two weeks and event frequency in the most
-recent weeks.
+Churn prediction is an important operation problem. Effective targeting of those who might churn and act earlier is crucial to keep the product's core users. As such, features are generated from the log file, including the frequency,
+recency of events, total playing time, songs fully played and other playing behaviors such as the mean and standard deviation of song playing time.
 
-The result provides important insight to what measures that the product operation should keep monitoring.
-Also, the accurate prediction result can suggest the right time when the operation system
-should try to intervene and influence the user in order to retain more current users of the music box.
-Current users are important asset to the product and churn prevention is crucial to
+Machine learning models, such as random forest, gradient boosting and Logistic regression are applied on the training data to predict the test data set. The end churn prediction accuracy is around 0.92 on the training and 0.91 on the testing data set, which is 14% more than the 80% baseline.
 
-The major problem of this application is the sheer size of data. It is hard to load the entire dataset into a pandas dataframe on a local computer. The processing code is written in Pyspark
-to make use of the big data technology in Spark when such data infrastructure is available. In this applicaiton,
-a user id level downsampling (randomly select 10% of users) is applied, so that the data processing and modelling can be accomplished on a
-personal computer. But it will be scalable when running on a spark cluster on Google Cloud or other cloud computing infrastructure.
+Variables that explain most of the variation is recency in a 30 days windows, total playing time in two weeks and event frequency in the most recent weeks.
+
+The result provides important insights to what measures that the product operation should keep monitoring.
+Also, the accurate prediction results can suggest the right time window (decrease in frequency for two weeks, for example) when the operation system should try to intervene and influence the user in order to retain more current users of the music box. 
+
+The major problem of this project is the sheer size of data. It is hard to load the entire dataset into a pandas dataframe on a local computer. This project builds the basic tools and practices for analyzing large, user-record level data, which would be impossible to do so directly on a computer.
+
+The processing code is written in Pyspark to make use of the big data technology in Spark when such data infrastructure is available. In this applicaiton, a user id level downsampling (randomly select 10% of users) is applied, so that the data processing and modelling can be accomplished on a personal computer. But it will be scalable when running on a spark cluster on Google Cloud or other cloud computing infrastructure. 
 
 
-2. Data Downloading and Processing
-(for the exact code, see 1_download data.ipynb, 2_unpack_and_clean_files.sh, and 3.etl_down_sampling.ipynb)
+## 2. Data Downloading and Processing 
+(For the exact code, see 1_download data.ipynb, 2_unpack_and_clean_files.sh, and 3.etl_down_sampling.ipynb)
 
-Scripts are prepared for automatic data downloading and processing, including extracting the date information from file names.
-Due to the large size of the data, I tried to use Spark when I process the data and use the SparkMLlib to train the model. Since I currently don't access to a Cloud Spark cluster,
-I applied a user id level downsampling to conduct the analysis on 10% of the users as a demo. But the code can be modified a little so that it can also be run on a spark cluster.
-To do so, I first aggregated record at the user_id level to get all the distinct user_ids. Then, I randomly split the data into 10 fold and only pick one fold for the analysis.
+Scripts are prepared for automaticaly downloading and processing data, including extracting the date information from file names. Due to the large size of the data, I tried to use Spark when I process the data and try to use the SparkMLlib to train the model. Since I currently don't access to a Cloud Spark cluster, I applied a user id level downsampling to conduct the analysis on 10% of the users as a demo. To do so, I first aggregated record at the user_id level to get all the distinct user_ids. Then, I randomly split the data into 10 fold and only pick one fold for the analysis.
 
-3. Data cleaning and transformation
+But the code can be modified a little so that it can also be run on a spark cluster and no downsampling would be needed. 
+and that would be my next step of bringing things to google cloud DataProc.
+
+##  3. Data cleaning and transformation
 (for the exact code, see 4.feature_label_generation_with_spark.ipynb )
 
 Data cleaning are applied before the feature engineering steps.
@@ -46,7 +40,7 @@ are excluded when forming the variables.
 Irregular users that has unusually long playing time (greater than a 99.9 percentile) are
 are considered bots and are consequently excluded from the data.
 
-4. Feature engineering
+## 4. Feature engineering
 (for the exact code, see 4.feature_label_generation_with_spark.ipynb )
 
 In terms of prediction windows, I defined a label window of 14 days and a feature
@@ -57,15 +51,13 @@ window of 30. In others words, churn is defined as inactivity from 2017-04-29 to
 Most features are related to behavior. Features are generated by activity type (search, play, download)
 and by different window size (one day, a week, a month etc.). The exact variables including the following:
 frequency, recency of events, total playing time, songs fully played and other playing behaviors such as
-the mean and Standard deviation of song playing time.
-Frequency of certain Events over a fixed Time Window.
-Recency is last event time from a Snapshot of time.
-Total playing time of songs by user for a certain time window.
-The mean and Standard deviation of Play time percentage of song length
+the mean and Standard deviation of song playing time; Frequency of certain Events over a fixed Time Window;
+Recency is last event time from a Snapshot of time; Total playing time of songs by user for a certain time window.
+The mean and Standard deviation of play time percentage of the entire song length. 
 
 User profile is a bit limited for the given data, so User preferred device, i.e. android and IOS users is the main characterization of this aspect.
 
-5.  Exploratory data analysis
+## 5.  Exploratory data analysis
 * Evaluating the playing time to distinguish bots.
 
 ![User play time](img/bots.png)
@@ -77,7 +69,7 @@ User profile is a bit limited for the given data, so User preferred device, i.e.
 ![Trend](img/trend.png)
 
 
-6. Modeling
+## 6. Modeling
 (for the exact code, see 5.train_model_sklearn.ipynb )
 
 I built the user churn prediction model based on user behavior variable in a 30 days window to predict churn behavior of users
@@ -97,11 +89,12 @@ Variables that explain most of the variation is recency in a 30 days windows, to
 ![feature importance](img/Feature_importance.png)
 
 
-7. Conclusion and suggestion
+## 7. Conclusion and suggestion
 
-This project builds a demo for analyzing large user record level data and analyze user behaviors.
+This project builds a demo for the right tool to use and the right practice to apply, when  analyzing large user record level data. This type of analysis on user behavior would not be possible on personal computers without these preprocessing steps.
 
-The result provides important insight to what measures that the product operation should keep monitoring.
-Also, the accurate prediction result can suggest the right time when the operation system
-should try to intervene and influence the user in order to retain more current users of the music box.
-Current users are important asset to the product and churn prevention is crucial to guarantee income inflows. 
+The result provides important insight to what measures that the product operation should keep monitoring that decides whether the user would churn or not. 
+
+The accurate prediction result can suggest the right time when the operation system should try to intervene and influence the user in order to retain more current users of the music box.
+
+Current users are important asset to the product and churn prevention is crucial to guarantee income inflows. Accurate churn prediction provides the right users to target and the right time to intervene, providing value to the production operation process.
