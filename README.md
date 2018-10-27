@@ -1,13 +1,13 @@
-# Capstone Project Report: Music Box Churn Prediction
+# Capstone Project Report: Music Box Churn Prediction and Recommendation system 
 
 ## 1. Project Summary
 
-This project is to use music box log data to predict churn, including information on songs played, user profile, searching activities. This project builds a demo for analyzing large user record level data and analyze user behaviors.
+This purpose of this project is to use music box log data to predict churn, including information on songs played, user profile, searching activities. This project builds a demo for analyzing large user record level data and analyze user behaviors. A recommendation system based on Collaborative Filtering is built and reaches an rmse of
+0.567.
 
 Churn is defined by inactivity in fixed 14 days window. It is predicted using the users' behavior pattern in a 30 day window before that 14 day window. 
 
-Churn prediction is an important operation problem. Effective targeting of those who might churn and act earlier is crucial to keep the product's core users. As such, features are generated from the log file, including the frequency,
-recency of events, total playing time, songs fully played and other playing behaviors such as the mean and standard deviation of song playing time.
+Churn prediction is an important operation problem. Effective targeting of those who might churn and act earlier is crucial to keep the product's core users. As such, features are generated from the log file, including the frequency, recency of events, total playing time, songs fully played and other playing behaviors such as the mean and standard deviation of song playing time.
 
 Machine learning models, such as random forest, gradient boosting and Logistic regression are applied on the training data to predict the test data set. The end churn prediction accuracy is around 0.92 on the training and 0.91 on the testing data set, which is 14% more than the 80% baseline.
 
@@ -16,9 +16,12 @@ Variables that explain most of the variation is recency in a 30 days windows, to
 The result provides important insights to what measures that the product operation should keep monitoring.
 Also, the accurate prediction results can suggest the right time window (decrease in frequency for two weeks, for example) when the operation system should try to intervene and influence the user in order to retain more current users of the music box. 
 
+The recommender systems is based on Collaborative filtering, which is commonly used . The rmse on test data is 0.567 which is a lot smaller than the bench mark performance RMSE~1.2-1.5. Sample recommendation of songs and user ids are displayed.
+
 The major problem of this project is the sheer size of data. It is hard to load the entire dataset into a pandas dataframe on a local computer. This project builds the basic tools and practices for analyzing large, user-record level data, which would be impossible to do so directly on a computer.
 
 The processing code is written in Pyspark to make use of the big data technology in Spark when such data infrastructure is available. In this applicaiton, a user id level downsampling (randomly select 10% of users) is applied, so that the data processing and modelling can be accomplished on a personal computer. But it will be scalable when running on a spark cluster on Google Cloud or other cloud computing infrastructure. 
+
 
 
 ## 2. Data Downloading and Processing 
@@ -88,8 +91,77 @@ Variables that explain most of the variation is recency in a 30 days windows, to
 
 ![feature importance](img/Feature_importance.png)
 
+## 7. Recommendation system 
 
-## 7. Conclusion and suggestion
+(for the exact code, see 6.train_model_sklearn.ipynb )
+
+
+Collaborative filtering is commonly used for recommender systems. We make predictions (filtering) about the interests of a user by collecting preferences or taste information from many users (collaborating). The underlying assumption is that if a user A has the same opinion as a user B on an issue, A is more likely to have B's opinion on a different issue C than to have the opinion on C of a user chosen randomly.
+
+A few data cleaning steps were applied. Records with missing song ids, or too short (1s) or too long (more than 5 minutes) are exclueded. To guarantee the quality of the recommendation system, it is built only on active users with at least 5 songs played for the data period. 
+
+Since the log data that we have doesnt' have users' rating on the song, a proxy for rating using playtime/song_length, known as 'percent' is used. 
+
+The rmse on test data is 0.567 which is a lot smaller than the bench mark performance RMSE~1.2-1.5. 
+
+
+To demonstate the use of the recommendation system, sample outputs are displayed below. 
+
+Top 10 songs recommendations for each user
++---------+--------------------+
+|      uid|     recommendations|
++---------+--------------------+
+| 35556737|[[6762450, 103.46...|
+| 72854913|[[6762450, 70.460...|
+|149954144|[[6762450, 64.763...|
+|165428768|[[6762450, 75.927...|
+|167415658|[[6762450, 54.702...|
+|167570315|[[6762450, 125.99...|
+|167575737|[[6762450, 121.32...|
+|167579413|[[3288014, 52.417...|
+|167580826|[[6762450, 41.008...|
+|167584025|[[6762450, 130.17...|
+|167587488|[[6762450, 105.33...|
+|167588969|[[6762450, 70.224...|
+|167590565|[[6762450, 154.22...|
+|167595909|[[3288014, 63.964...|
+|167597788|[[3288065, 121.96...|
+|167605713|[[3288065, 60.772...|
+|167608347|[[6762450, 70.228...|
+|167627248|[[6762450, 104.45...|
+|167645953|[[6762450, 72.958...|
+|167655696|[[6762450, 52.226...|
++---------+--------------------+
+
+
+ Top 10 user recommendations for each song
+
++----------+--------------------+
+|   song_id|     recommendations|
++----------+--------------------+
+|-789968706|[[168197794, 0.98...|
+|      1645|[[168574955, 4.59...|
+|     58305|[[168870872, 3.02...|
+|     69042|[[168197794, 1.89...|
+|     77422|[[168959539, 0.82...|
+|     78064|[[168197794, 1.21...|
+|     78120|[[168574955, 2.03...|
+|     78400|[[168018103, 1.18...|
+|     79361|[[168574955, 0.76...|
+|     81349|[[168870872, 0.08...|
+|     87724|[[167610432, 1.93...|
+|     90228|[[168870872, 2.83...|
+|     92834|[[168197794, 1.45...|
+|     92959|[[169032223, 1.10...|
+|     94265|[[168574955, 3.88...|
+|     95994|[[168870872, 3.58...|
+|     96393|[[168870872, 0.27...|
+|    104508|[[168870872, 0.17...|
+|    104656|[[168948486, 0.05...|
+|    107032|[[168751937, 1.37...|
++----------+--------------------+
+
+## 8. Conclusion and suggestion
 
 This project builds a demo for the right tool to use and the right practice to apply, when  analyzing large user record level data. This type of analysis on user behavior would not be possible on personal computers without these preprocessing steps.
 
@@ -98,3 +170,5 @@ The result provides important insight to what measures that the product operatio
 The accurate prediction result can suggest the right time when the operation system should try to intervene and influence the user in order to retain more current users of the music box.
 
 Current users are important asset to the product and churn prevention is crucial to guarantee income inflows. Accurate churn prediction provides the right users to target and the right time to intervene, providing value to the production operation process.
+
+The recommendation system built is quite accurate and can help improve the users experience on using the music box.
