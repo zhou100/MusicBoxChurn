@@ -67,8 +67,15 @@ User profile is a bit limited for the given data, so User preferred device, i.e.
 
 5.  Exploratory data analysis
 * Evaluating the playing time to distinguish bots.
+
+![User play time](img/bots.png)
+
 * Counting the churned users in the time windows, about 60% users are churned, which is not surprising according to past experiences in the industry.
+
+
 * Plotting the events against time, a declining trend after early April.
+![Trend](img/trend.png)
+
 
 6. Modeling
 (for the exact code, see 5.train_model_sklearn.ipynb )
@@ -80,9 +87,15 @@ the test data set. The parameters are a combination of hand tuning and grid sear
 The AUC of random forest is 0.9125 on the testing dataset, 0.85 Precision and 0.89 recall. Similar result for Gradient boosting.
 AUC of Logistic regression is at 0.81 for the testing set.
 
+![random forest AUC ](img/rfc_AUC.png)
+
+
 The end churn prediction accuracy is around 0.92 on the training and 0.91 on the testing data set, which is 14% more than the 80% baseline.
-Variables that explain most of the variation is recency in a 30 days windows, total playing time in two weeks and event frequency in the most
-recent weeks.
+
+Variables that explain most of the variation is recency in a 30 days windows, total playing time in two weeks and event frequency in the most recent weeks.
+
+![feature importance](img/Feature_importance.png)
+
 
 7. Conclusion and suggestion
 
