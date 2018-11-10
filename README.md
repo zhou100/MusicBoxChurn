@@ -108,6 +108,7 @@ The rmse on test data is 0.567 which is a lot smaller than the bench mark perfor
 To demonstate the use of the recommendation system, sample outputs are displayed below. 
 
 Top 10 songs recommendations for each user
+
 +---------+--------------------+
 
 
