@@ -1,4 +1,4 @@
-.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score
+.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score score-report monitoring-report
 
 PYTHON ?= python
 DATA ?= Processed_data/df_model_final.csv
@@ -40,6 +40,12 @@ INPUT ?= Processed_data/df_model_final.csv
 OUTPUT_DIR ?= output
 batch-score:
 	$(PYTHON) -m musicbox_churn.inference.batch_score --run-dir $(RUN_DIR) --input $(INPUT) --output-dir $(OUTPUT_DIR)
+
+score-report:
+	$(PYTHON) -m musicbox_churn.monitoring.score_report --run-dir $(RUN_DIR)
+
+monitoring-report:
+	$(PYTHON) -m musicbox_churn.monitoring.drift_report --data $(DATA) --out $(OUTPUT_DIR)/monitoring_report.md
 
 lint:
 	ruff check .
