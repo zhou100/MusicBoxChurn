@@ -1,4 +1,4 @@
-.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score score-report monitoring-report
+.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score score-report monitoring-report docker-build docker-batch-score
 
 PYTHON ?= python
 DATA ?= Processed_data/df_model_final.csv
@@ -46,6 +46,24 @@ score-report:
 
 monitoring-report:
 	$(PYTHON) -m musicbox_churn.monitoring.drift_report --data $(DATA) --out $(OUTPUT_DIR)/monitoring_report.md
+
+# Container build + smoke run mirroring the k8s CronJob layout.
+IMAGE ?= musicbox-churn:dev
+docker-build:
+	docker build -t $(IMAGE) .
+
+# Mounts an existing run dir + the input CSV; writes to ./output.
+# Usage: make docker-batch-score RUN_DIR=$$(pwd)/artifacts/rf_<ts> INPUT=$$(pwd)/Processed_data/df_model_final.csv
+docker-batch-score:
+	docker run --rm \
+		-v $(RUN_DIR):/app/artifacts/run:ro \
+		-v $$(dirname $(INPUT)):/app/input:ro \
+		-v $$(pwd)/output:/app/output \
+		$(IMAGE) \
+		python -m musicbox_churn.inference.batch_score \
+			--run-dir /app/artifacts/run \
+			--input /app/input/$$(basename $(INPUT)) \
+			--output-dir /app/output
 
 lint:
 	ruff check .
