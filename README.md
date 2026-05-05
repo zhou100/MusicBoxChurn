@@ -198,9 +198,17 @@ See [TODOS.md](TODOS.md). Highlights: GitHub Actions CI (P2), probability
 calibration (P3, only if a downstream caller actually needs it), time-based
 split (P3, requires data we don't have).
 
-The deferred infra layers (Dockerfile + k8s CronJob; Feast feature
-definitions; FastAPI serving stub) live under `extras/` once added — a
-hard "doc-only" partition to keep the core honest.
+Deferred / doc-only infra lives under [`extras/`](extras/) — a hard
+partition the core never imports from:
+
+- [`extras/feast/`](extras/feast/) — declarative feature contract
+  (entity, schema, offline source) mirroring `musicbox_churn.data.schema`.
+  The pipeline does **not** read from Feast; this stub documents the
+  contract a future deploy would need to honor.
+- `extras/api/` and `extras/k8s/api-*.yaml` — FastAPI online-serving
+  stub + k8s manifests, **not yet added**. Online inference requires
+  raw event logs (gone) to recompute rolling features at request time;
+  see § Honest framing.
 
 ---
 

@@ -1,0 +1,9 @@
+# Doc-only Feast registry config. Declares a local, offline-only feature
+# store. No online provider, no materialization loop. See README.md.
+project: musicbox_churn
+registry: data/registry.db
+provider: local
+offline_store:
+  type: file
+# online_store deliberately omitted — see README.md "What this is NOT".
+entity_key_serialization_version: 2
