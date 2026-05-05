@@ -1,4 +1,4 @@
-.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score score-report monitoring-report docker-build docker-batch-score
+.PHONY: install install-dev validate-data test lint format clean train train-lr train-rf train-gbm train-mlp mlflow-ui batch-score score-report monitoring-report docker-build docker-batch-score report-figures
 
 PYTHON ?= python
 DATA ?= Processed_data/df_model_final.csv
@@ -46,6 +46,10 @@ score-report:
 
 monitoring-report:
 	$(PYTHON) -m musicbox_churn.monitoring.drift_report --data $(DATA) --out $(OUTPUT_DIR)/monitoring_report.md
+
+# Regenerate figures embedded in REPORT.md from the latest run of each model.
+report-figures:
+	$(PYTHON) scripts/generate_report_figures.py
 
 # Container build + smoke run mirroring the k8s CronJob layout.
 IMAGE ?= musicbox-churn:dev

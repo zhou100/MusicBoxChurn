@@ -6,9 +6,10 @@ score** used to prioritize a finite intervention budget, not a calibrated
 probability for expected-value math. See [§ Honest framing](#honest-framing).
 
 This repo is a rewrite of an older capstone notebook chain. The original
-report and notebooks are preserved at [CAPSTONE.md](CAPSTONE.md) and
-[1_…6_…ipynb](.); the modern stack lives under [src/musicbox_churn/](src/musicbox_churn/).
-For why the table looks the way it does, see [DATA.md](DATA.md).
+report and notebooks are preserved under [archive/](archive/); the modern
+stack lives in [src/musicbox_churn/](src/musicbox_churn/). For why the
+table looks the way it does, see [DATA.md](DATA.md). For results and
+visuals, see [REPORT.md](REPORT.md).
 
 ---
 
@@ -206,7 +207,7 @@ hard "doc-only" partition to keep the core honest.
 ## Acknowledgements
 
 Original capstone (data ingestion in PySpark, feature definitions, label
-window, EDA): see [CAPSTONE.md](CAPSTONE.md). The processed table
+window, EDA): see [archive/CAPSTONE.md](archive/CAPSTONE.md). The processed table
 [Processed_data/df_model_final.csv](Processed_data/df_model_final.csv) is
 the output of that pipeline and the offline source of truth for everything
 in this repo.
