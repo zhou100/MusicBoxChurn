@@ -1,0 +1,14 @@
+model_type: lr
+seed: 42
+data:
+  path: Processed_data/df_model_final.csv
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+params:
+  C: 1.0
+  max_iter: 1000
+threshold:
+  policy: max_f1
+mlflow_experiment: musicbox_churn
