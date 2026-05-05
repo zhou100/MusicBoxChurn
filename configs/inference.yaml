@@ -1,0 +1,4 @@
+run_dir: artifacts/lr_latest
+input_path: Processed_data/df_model_final.csv
+output_dir: output
+top_n: 50

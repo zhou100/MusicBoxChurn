@@ -10,7 +10,12 @@ from .schema import ID_COL, NUMERIC_FEATURE_COLUMNS, validate
 logger = logging.getLogger(__name__)
 
 
-def load_csv(path: str | Path, *, validate_schema: bool = True) -> pd.DataFrame:
+def load_csv(
+    path: str | Path,
+    *,
+    validate_schema: bool = True,
+    require_target: bool = True,
+) -> pd.DataFrame:
     df = pd.read_csv(path)
     df.columns = [c.strip() for c in df.columns]
 
@@ -25,7 +30,7 @@ def load_csv(path: str | Path, *, validate_schema: bool = True) -> pd.DataFrame:
             df = df.drop_duplicates(subset=[ID_COL], keep="first").reset_index(drop=True)
 
     if validate_schema:
-        validate(df)
+        validate(df, require_target=require_target)
     return df
 
 

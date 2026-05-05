@@ -161,6 +161,8 @@ def train_from_config(cfg: dict[str, Any]) -> Path:
             "feature_columns": FEATURE_COLUMNS,
             "target_col": TARGET_COL,
             "preprocessor_output_dim": int(X_train.shape[1]),
+            "model_type": model_type,
+            "model_artifact": _model_artifact_name(model_type),
         },
         out_dir / "feature_schema.json",
     )
