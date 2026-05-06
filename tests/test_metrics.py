@@ -8,6 +8,7 @@ from musicbox_churn.training.metrics import (
     lift_at_k,
     precision_at_top_k,
     recall_at_top_k,
+    slice_metrics,
 )
 
 
@@ -40,6 +41,26 @@ def test_compute_metrics_shape():
         assert f"precision_at_{frac}pct" in out
         assert f"recall_at_{frac}pct" in out
         assert f"lift_at_{frac}pct" in out
+
+
+def test_slice_metrics_splits_by_group_and_skips_small_or_degenerate():
+    rng = np.random.default_rng(2)
+    n = 600
+    y = rng.integers(0, 2, size=n)
+    s = rng.random(n)
+    groups = np.array(
+        ["iphone"] * 300 + ["android"] * 290 + ["other"] * 10,
+        dtype=object,
+    )
+    # Force one large group to be all-zero labels — should be skipped (degenerate).
+    y_degenerate = y.copy()
+    y_degenerate[300:590] = 0
+    out = slice_metrics(y_degenerate, s, groups, min_group_size=50)
+    assert "iphone" in out
+    assert "android" not in out  # all-zero labels
+    assert "other" not in out  # below min_group_size
+    for key in ("pr_auc", "roc_auc", "brier", "n"):
+        assert key in out["iphone"]
 
 
 def test_topk_invalid_k_raises():

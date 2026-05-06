@@ -60,3 +60,32 @@ def compute_metrics(
         out[f"recall_at_{pct}pct"] = recall_at_top_k(y_true, scores, k)
         out[f"lift_at_{pct}pct"] = lift_at_k(y_true, scores, k)
     return out
+
+
+def slice_metrics(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    groups: np.ndarray,
+    *,
+    top_k_fractions: tuple[float, ...] = (0.10,),
+    min_group_size: int = 50,
+) -> dict[str, dict[str, float]]:
+    """Per-group metrics for fairness/bias slicing.
+
+    Skips groups smaller than ``min_group_size`` or with only one label class
+    (PR-AUC / ROC-AUC are undefined there). Returns a mapping
+    ``{group_value: metrics_dict}`` where each value matches ``compute_metrics``.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    scores = np.asarray(scores).astype(float)
+    groups = np.asarray(groups)
+    out: dict[str, dict[str, float]] = {}
+    for g in np.unique(groups):
+        mask = groups == g
+        if mask.sum() < min_group_size:
+            continue
+        y_g = y_true[mask]
+        if y_g.sum() == 0 or y_g.sum() == len(y_g):
+            continue
+        out[str(g)] = compute_metrics(y_g, scores[mask], top_k_fractions=top_k_fractions)
+    return out

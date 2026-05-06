@@ -19,6 +19,29 @@ def _table(metrics: dict[str, float]) -> str:
     return "| metric | value |\n|---|---|\n" + "\n".join(rows)
 
 
+def _slice_table(slices: dict[str, dict[str, dict[str, float]]]) -> str:
+    """Render per-slice metrics as one markdown table per slice dimension."""
+    blocks = []
+    for slice_name, groups in slices.items():
+        if not groups:
+            blocks.append(f"_No `{slice_name}` group met the size + label-balance thresholds._")
+            continue
+        header = (
+            f"#### Slice: `{slice_name}`\n"
+            "| group | n | prevalence | PR-AUC | ROC-AUC | Brier | lift@10pct |\n"
+            "|---|---:|---:|---:|---:|---:|---:|"
+        )
+        rows = []
+        for g, m in groups.items():
+            rows.append(
+                f"| {g} | {int(m['n']):,} | {m['prevalence']:.3f} | "
+                f"{m['pr_auc']:.3f} | {m['roc_auc']:.3f} | {m['brier']:.3f} | "
+                f"{m.get('lift_at_10pct', float('nan')):.2f} |"
+            )
+        blocks.append(header + "\n" + "\n".join(rows))
+    return "\n\n".join(blocks)
+
+
 def _reliability_table(rel: dict[str, list[float]]) -> str:
     header = "| bin | mean_pred | empirical_rate | count |\n|---|---|---|---|"
     rows = []
@@ -39,15 +62,25 @@ def render_report(run_dir: str | Path) -> str:
     threshold = json.loads((run_dir / "threshold.json").read_text())
     schema = json.loads((run_dir / "feature_schema.json").read_text())
 
+    val_slices = val.get("slices") or {}
+    test_slices = test.get("slices") or {}
+    val_slice_section = (
+        f"\n### Slice metrics (validation)\n{_slice_table(val_slices)}\n" if val_slices else ""
+    )
+    test_slice_section = (
+        f"\n### Slice metrics (test)\n{_slice_table(test_slices)}\n" if test_slices else ""
+    )
+
     return f"""# Evaluation report — `{run_dir.name}`
 
 Model type: **{schema.get("model_type", "?")}**
 
 ## Framing
-Outputs are **ranking scores**, not calibrated probabilities. PR-AUC and
-recall_at_top_k are the load-bearing metrics; ROC-AUC and Brier are reported
-for context. See TODOS.md (P3) for the calibration unwind path if probability
-semantics become required downstream.
+This section reports **raw ranking scores** from the model. PR-AUC and
+recall_at_top_k are the load-bearing metrics; ROC-AUC and Brier are
+reported for context. Calibrated probabilities (`prob_churn`) are produced
+separately by `calibrator.pkl` and surfaced in `metrics.json["calibrated"]`
+and at batch-score time.
 
 ## Validation set
 {_table(val["metrics"])}
@@ -57,7 +90,7 @@ semantics become required downstream.
 
 ### Reliability (validation, 10 bins)
 {_reliability_table(val["reliability"])}
-
+{val_slice_section}
 ## Test set
 {_table(test["metrics"])}
 
@@ -66,7 +99,7 @@ semantics become required downstream.
 
 ### Reliability (test, 10 bins)
 {_reliability_table(test["reliability"])}
-
+{test_slice_section}
 ## Threshold
 Policy: `{threshold.get("policy")}`
 Selected: `{threshold.get("threshold"):.4f}`
