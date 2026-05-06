@@ -20,7 +20,9 @@ from ..models.baselines import build_gbm, build_lr, build_rf
 from ..models.interface import ModelHandle
 from ..models.tabular_mlp import TabularMLPHandle
 from ..utils.seed import set_global_seed
+from .calibration import ScoreCalibrator
 from .evaluate import evaluate
+from .metrics import compute_metrics
 from .preprocessor import build_preprocessor
 from .thresholding import ThresholdPolicy, select_threshold
 
@@ -135,6 +137,20 @@ def train_from_config(cfg: dict[str, Any]) -> Path:
     val_eval = evaluate(handle, X_val, y_val)
     test_eval = evaluate(handle, X_test, y_test)
 
+    # Calibration: fit on val (raw_score, label); evaluate on val + test.
+    cal_cfg = cfg.get("calibration", {"method": "isotonic"})
+    cal_method = cal_cfg.get("method", "isotonic")
+    val_scores_raw = handle.predict_proba(X_val)
+    test_scores_raw = handle.predict_proba(X_test)
+    calibrator = ScoreCalibrator(method=cal_method).fit(val_scores_raw, y_val)
+    val_scores_cal = calibrator.transform(val_scores_raw)
+    test_scores_cal = calibrator.transform(test_scores_raw)
+    calibrated_metrics = {
+        "method": cal_method,
+        "val": compute_metrics(y_val, val_scores_cal),
+        "test": compute_metrics(y_test, test_scores_cal),
+    }
+
     thr_cfg = cfg.get("threshold", {"policy": "max_f1"})
     policy = ThresholdPolicy(thr_cfg.get("policy", "max_f1"))
     val_scores = handle.predict_proba(X_val)
@@ -154,7 +170,15 @@ def train_from_config(cfg: dict[str, Any]) -> Path:
 
     handle.save(out_dir / _model_artifact_name(model_type))
     joblib.dump(pre, out_dir / "preprocessor.pkl")
-    _save_json({"metrics": val_eval["metrics"], "test_metrics": test_eval["metrics"]}, out_dir / "metrics.json")
+    calibrator.save(out_dir / "calibrator.pkl")
+    _save_json(
+        {
+            "metrics": val_eval["metrics"],
+            "test_metrics": test_eval["metrics"],
+            "calibrated": calibrated_metrics,
+        },
+        out_dir / "metrics.json",
+    )
     _save_json(thr_info, out_dir / "threshold.json")
     _save_json(
         {
@@ -179,7 +203,12 @@ def train_from_config(cfg: dict[str, Any]) -> Path:
             mlflow.log_metric(f"val_{k}", v)
         for k, v in test_eval["metrics"].items():
             mlflow.log_metric(f"test_{k}", v)
+        for k, v in calibrated_metrics["val"].items():
+            mlflow.log_metric(f"val_cal_{k}", v)
+        for k, v in calibrated_metrics["test"].items():
+            mlflow.log_metric(f"test_cal_{k}", v)
         mlflow.log_metric("threshold", thr_info["threshold"])
+        mlflow.log_param("calibration_method", cal_method)
         mlflow.log_artifacts(str(out_dir))
 
     logger.info("done: %s (val PR-AUC=%.4f)", out_dir, val_eval["metrics"]["pr_auc"])

@@ -41,10 +41,11 @@ def test_batch_score_writes_outputs(tmp_path, sample_df, trained_run):
 
     df_csv = pd.read_csv(paths["csv"])
     assert len(df_csv) == len(inference_input)
-    assert {ID_COL, "score", "rank", "above_threshold"} <= set(df_csv.columns)
+    assert {ID_COL, "score", "prob_churn", "rank", "above_threshold"} <= set(df_csv.columns)
     assert df_csv["rank"].is_monotonic_increasing
     assert df_csv["score"].is_monotonic_decreasing
     assert df_csv["score"].between(0.0, 1.0).all()
+    assert df_csv["prob_churn"].between(0.0, 1.0).all()
 
     audience = pd.read_csv(paths["audience"])
     assert len(audience) == 10

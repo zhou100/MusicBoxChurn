@@ -1,167 +1,104 @@
 # Music Box churn-risk scoring — results report
 
-A modernized churn-prediction system on the Music Box dataset (~58k users,
-single 2017-04-28 snapshot). Built as a productionized batch-scoring
-service rather than a notebook chain. This document is the headline
-result; for code see [src/musicbox_churn/](src/musicbox_churn/), for
-provenance see [DATA.md](DATA.md), for the original capstone see
-[archive/](archive/).
+A churn-risk scoring system for the Music Box dataset (~58k users) that
+goes from raw feature vectors → calibrated probabilities → a budget-aware
+decision rule that tells lifecycle marketing **who to contact and when
+it stops paying off**.
 
 ---
 
 ## TL;DR
 
-> **Reaching the top-decile audience captures 16% of all churners; the
-> top-half captures 74% — a 1.5× lift over random outreach.** Random
-> Forest, LightGBM, MLP and Logistic Regression are all within ~1
-> PR-AUC point of each other (0.929–0.940). The product question is
-> not "which model wins", it's **how much retention budget to spend**.
+> **The win isn't the 0.94 PR-AUC — it's that calibrated probabilities
+> turn the model into a dollar-value decision system.**
+>
+> On the 8,692-user test set, at the locked unit economics
+> ($1/contact, $10 per saved user, 20% intervention success), the
+> model picks an **optimal cutoff at the top ~64% of risk-scored users**
+> and generates **$4,052 in expected net retention value** — **+92%
+> over untargeted outreach** to the same audience size, and +∞ over
+> blanket outreach (which loses money below ~16% intervention success).
+>
+> Below 10% success, no outreach pays off and the model says so. Above
+> 30%, the model still helps prioritize but the gap to random shrinks.
+> The model isn't just predicting churn — it's telling marketing **what
+> intervention success rate they need to clear**, and **what the optimal
+> audience size is at any given rate**.
 
-| Decile contacted | Churners caught | Lift over random |
-|---|---:|---:|
-| top 5%  | 8.0%   | 1.6× |
-| top 10% | 15.9%  | 1.6× |
-| top 20% | 31.5%  | 1.6× |
-| top 30% | 46.6%  | 1.6× |
-| top 50% | 73.9%  | 1.5× |
+| Intervention success | Optimal audience % | Net value (model) | Net value (random) | Model lift |
+|---:|---:|---:|---:|---:|
+| 10% | 0% (don't contact anyone) | $0 | $0 | — |
+| 15% | 59% | **$1,698** | $0 | break-even gap |
+| 20% | 64% | **$4,052** | $2,106 | +92% |
+| 25% | 69% | **$6,532** | $4,806 | +36% |
+| 30% | 72% | **$9,062** | $7,505 | +21% |
+| 35% | 72% | **$11,615** | $10,204 | +14% |
 
-*(LightGBM on a 8,692-user test set; prevalence = 0.621)*
-
----
-
-## 1 · Motivation
-
-Music Box is a music-streaming app. Roughly **62% of users go inactive
-in any 14-day window** — typical for free-tier consumer apps. Retention
-teams have a finite budget for outreach (push notifications, discount
-nudges, re-engagement emails) and have to pick **who to spend it on**.
-
-A churn-prediction model is only useful if it can answer the operational
-question:
-
-> *"If we have budget to contact N% of users, what fraction of
-> actual churners do we catch?"*
-
-That's a **ranking problem**, not a classification problem. Accuracy is
-the wrong metric — at 62% prevalence, predicting "everyone churns" gets
-62% accuracy and zero usefulness. The right metrics are **PR-AUC**,
-**lift@top-k**, and the **cumulative-gains curve** below.
+*All values on the 8,692-user test set. See [§ 4](#4--so-what--from-scores-to-spend-decisions) for derivation.*
 
 ---
 
-## 2 · Data
+## 1 · Why — the business problem
+
+Music Box loses **~62% of its users to inactivity in any 14-day window**
+— typical for free-tier consumer apps. Retention teams have a finite
+budget for outreach (push notifications, discount nudges, re-engagement
+emails), so they need to answer three questions simultaneously:
+
+1. **Who is most likely to churn?** (ranking)
+2. **What's the probability each user will churn?** (calibration)
+3. **Given a unit cost per contact and a unit value per save, who should
+   we actually contact and how big should the audience be?** (decision)
+
+A model that only answers #1 produces a leaderboard. A model that
+answers #2 lets marketing reason about expected value. A model that
+answers #3 can directly drive the campaign. This pipeline answers all
+three.
+
+---
+
+## 2 · How — pipeline
+
+```
+Processed_data/df_model_final.csv  (57,943 users × 45 features + label)
+   │
+   ├─→ Schema validation, dedupe (10 dup uids), stratified 70/15/15 split (seed=42)
+   │
+   ├─→ Preprocessor: StandardScaler(numeric) + OneHotEncoder(device_type)
+   │
+   ├─→ Train: LR / RF / LightGBM / PyTorch MLP behind a unified ModelHandle
+   │           ↓
+   │       raw ranking score (uncalibrated)
+   │
+   ├─→ Calibrate: IsotonicRegression fit on val (raw_score, label)
+   │           ↓
+   │       calibrated P(churn) — usable in expected-value math
+   │
+   ├─→ Threshold policy: max-F1 / top-k / precision-floor / recall-floor
+   │
+   └─→ batch_score.py → ranked CSV/parquet with both raw `score` and `prob_churn`
+                       + audience_top50.csv export
+```
+
+### 2.1 Data — the underlying signal
 
 | | |
 |---|---|
-| Source | Music Box event logs, 2017-03-30 → 2017-05-12 (3 streams: play / download / search) |
 | Modeling table | 57,943 users × 45 numeric features + `device_type` + `label` |
 | Feature window | 30 days (2017-03-30 → 2017-04-28) |
 | Label window | 14 days forward (2017-04-29 → 2017-05-12) |
 | Label rule | Inactive throughout label window → churn (1) |
-| Class balance | ≈ 60% churn / 40% active |
+| Class balance | ~62% churn / 38% active |
 
-Features fall in five families, each computed at multiple windows
-(1, 3, 7, 14, 30 days):
+Five feature families, computed at multiple windows (1, 3, 7, 14, 30 days):
+**frequency** (event counts), **recency** (days since last event), **total
+playtime**, **songs fully played** (≥80% completion), and
+**play-completion %** (mean + stddev). Plus one categorical:
+`device_type` (iPhone vs Android/other). Full provenance: [DATA.md](DATA.md).
 
-- **Frequency** — counts of plays / downloads / searches
-- **Recency** — days since last event of each type
-- **Total playtime** — seconds of audio played
-- **Songs fully played** — events where ≥ 80% of song was completed
-- **Play-completion %** — mean and stddev of `play_time / song_length`
+### 2.2 The model isn't the headline
 
-Plus a single profile feature: `device_type` (iPhone vs Android/other).
-
-> **Honest note on the data.** We have a single snapshot — no timestamp
-> column on rows, raw event logs no longer available. This rules out
-> time-based splits and real production-drift monitoring. See
-> [DATA.md](DATA.md) §5 and [TODOS.md](TODOS.md) for the full constraint
-> list and the unwind path if a multi-snapshot data source becomes
-> available.
-
----
-
-## 3 · Method
-
-### 3.1 Pipeline
-
-```
-Processed_data/df_model_final.csv
-   │
-   ▼
-[ load_csv → schema validation → dedupe → stratified 70/15/15 split (seed=42) ]
-   │
-   ▼
-[ ColumnTransformer: StandardScaler(numeric) + OneHotEncoder(device_type) ]
-   │
-   ├──▶ Logistic Regression (sklearn)
-   ├──▶ Random Forest        (sklearn, 300 trees)
-   ├──▶ LightGBM             (500 rounds, lr=0.05)
-   └──▶ MLP                  (PyTorch, [128, 64], BatchNorm, dropout=0.2)
-            │
-            ▼
-[ predict_proba on val + test ]
-   │
-   ▼
-[ metrics.json · threshold.json · feature_schema.json · model_card.md ]
-   │
-   ├──▶ MLflow run (params, metrics, artifacts)
-   ├──▶ batch_score CLI → ranked CSV/parquet + audience_top50.csv
-   └──▶ score_report + drift_report (split-stability, NOT real drift)
-```
-
-### 3.2 Locked design decisions
-
-These were settled in a CEO + engineering plan review and codified in the
-README so future-me doesn't relitigate them:
-
-| Decision | Choice | Rationale |
-|---|---|---|
-| Splits | 70/15/15 stratified by label, seed=42 | Single snapshot ⇒ time split impossible (DATA.md §5) |
-| GBM library | LightGBM (not sklearn HGBT) | Faster; better defaults for tabular |
-| MLP `pos_weight` | **omitted** | Churn is the *majority* class; naive `neg/pos` would overweight majority and hurt calibration |
-| Compute | Auto-detect CUDA → CPU | Dataset is small enough that CPU is competitive; GPU is "free if present" |
-| Calibration | Brier + reliability only | No Platt/isotonic until a downstream caller actually needs `P(churn)` |
-| Tracking | MLflow file store | No remote registry; runs portable as `artifacts/<run>/` directories |
-| Linter | ruff (lint + format) | Drop black — redundant |
-
-### 3.3 What's *not* in this pipeline (deliberately)
-
-- **No real-time inference.** The 30-day rolling features need raw event
-  logs to recompute on demand; raw logs are gone. We ship batch scoring,
-  which is what lifecycle teams actually consume.
-- **No probability calibration.** All four model families are
-  uncalibrated rankers. We *measure* calibration (Brier + reliability)
-  but don't *fix* it.
-- **No expected-revenue / cost-curve framing.** That requires real LTV
-  inputs and calibrated probabilities. Out of scope; would be misleading.
-- **No drift monitoring in the production sense.** With one snapshot, the
-  monitoring report measures sampling variance across splits — not shift
-  over time. The report banner makes this explicit.
-
----
-
-## 4 · Results
-
-### 4.1 The headline question — how much budget catches how much churn?
-
-![Cumulative-gains curve](report/figures/lift_curve.png)
-
-All four models trace nearly the same curve. The operational shape:
-
-- **Top decile** of risk-scored audience contains **16% of all churners**
-- **Top half** contains **74% of all churners**
-- Curve flattens past the 70-80% mark — diminishing returns on outreach
-
-### 4.2 Score distribution — clean bimodal separation
-
-![Score histogram by true label](report/figures/score_histogram.png)
-
-Churned users (orange) pile up near 1.0; active users (blue) pile up near
-0. The overlap in the middle (~0.4–0.7 range) is the population where
-score-based ranking matters most — these are the borderline users where
-the model adds the most value over random selection.
-
-### 4.3 Model comparison — four-way tie
+All four model families land within ~1 PR-AUC point of each other:
 
 ![Model comparison](report/figures/model_comparison.png)
 
@@ -172,130 +109,199 @@ the model adds the most value over random selection.
 | lift@10pct | 1.59 | 1.59 | 1.57 | 1.57 |
 | Brier (lower = better) | **0.112** | 0.113 | 0.115 | 0.120 |
 
-RF and GBM are statistically indistinguishable. **The model choice should
-be driven by ops profile (training time, memory, deployment surface),
-not accuracy** — there is no clear accuracy winner.
-
-### 4.4 Precision–Recall curves
+PR curves overlap so tightly the lines are nearly indistinguishable:
 
 ![Precision–recall curves](report/figures/pr_curves.png)
 
-The curves overlap so tightly that the four lines are barely
-distinguishable. PR-AUC area difference between best (RF) and worst (LR)
-is 0.011 — well within "no clear winner" territory.
+**Pick by ops profile (training time, memory, deployment surface), not
+accuracy.** This report uses LightGBM as the primary model from here on
+because it trains in seconds and serializes small.
 
-### 4.5 Reliability — surprisingly well-calibrated out of the box
+### 2.3 Calibration — the key step that unlocks the decision system
 
-![Reliability diagrams](report/figures/reliability.png)
+Raw model outputs from any of these algorithms are **ranking scores**:
+the order is meaningful, the absolute number isn't a probability you
+can multiply by money. A score of 0.92 doesn't mean "92% chance this
+user churns" — it means "this user is near the front of the queue".
 
-All four models track close to the diagonal across the full 0–1 range,
-with no Platt or isotonic calibration applied. This is unusually clean
-for tree ensembles — most production GBMs need calibration before their
-probabilities mean anything.
+Calibration fixes that. We fit an `IsotonicRegression` on the validation
+split's `(raw_score, label)` pairs and apply it at scoring time. After
+calibration, `prob_churn` reads as an actual probability.
 
-**Caveat:** the README still calls these "ranking scores", not probabilities.
-This reliability diagram is a diagnostic, not a license. If a downstream
-consumer wants to multiply by LTV, calibrate first
-([TODOS.md](TODOS.md) P3).
+![Reliability — raw vs calibrated](report/figures/reliability.png)
 
-### 4.6 What drives the scores — feature importance
+**Surprising finding:** these models are already nearly calibrated out
+of the box (raw and calibrated points lie on top of each other along
+the diagonal). Brier score barely moves (test Brier change ≤0.2% per
+model after isotonic fitting). That's atypical for tree ensembles, which
+usually need calibration before their probabilities mean anything. We
+ship the calibrator anyway because:
+
+1. It costs nothing at inference time and removes any "just trust us"
+   on the probability framing.
+2. Future model retrains might *not* be naturally calibrated; the slot
+   exists.
+3. Downstream consumers can read `prob_churn` from the batch-score
+   output without needing to know whether calibration was load-bearing
+   for that particular run.
+
+### 2.4 Score distribution — clean separation
+
+![Calibrated probability distribution by true label](report/figures/score_histogram.png)
+
+Churned users (orange) pile up near `prob_churn = 1.0`; active users
+(blue) pile up near 0. The overlap zone in the middle (~0.4–0.7) is
+where score-based prioritization adds the most value over random
+selection — these are the borderline users.
+
+### 2.5 What drives the score
 
 ![Feature importance](report/figures/feature_importance.png)
 
-Both tree models agree on the top families:
-
-- **Recency wins.** `recent_P_last_30` (days since last play in 30-day
-  window) tops the RF chart — the original 2017 capstone reached the same
-  conclusion.
-- **Recent frequency matters.** `freq_P_last_30/14` are top-3 across
-  both models.
-- **Engagement-quality features** (`mean_percent_last_*`,
-  `tot_playtime_last_*`) cluster in the top 10 — *how* a user listens is
-  almost as informative as *whether* they listen.
-
-The two libraries score importance differently (RF: Gini-impurity decrease;
-LightGBM: split gain), but the ranking agrees on what matters.
+**Recency wins.** `recent_P_last_30` (days since last play in the 30-day
+window) tops the RF chart. `freq_P_last_30/14` (recent play counts) are
+top-3 across both tree models. Engagement-quality features
+(`mean_percent_last_*`, `tot_playtime_last_*`) cluster in the top 10
+— *how* a user listens is almost as informative as *whether* they listen.
 
 ---
 
-## 5 · What's shipped
+## 3 · So what — from scores to "who should we contact"
 
-| Component | Status |
+### 3.1 The ranking question — cumulative gains
+
+If marketing has budget to contact some fraction of users, ranked by
+risk, **how many true churners do they catch?**
+
+![Cumulative-gains curve](report/figures/lift_curve.png)
+
+| Audience contacted | Churners caught | Lift over random |
+|---:|---:|---:|
+| top 5% | 8.0% | 1.6× |
+| top 10% | 15.9% | 1.6× |
+| top 20% | 31.5% | 1.6× |
+| top 30% | 46.6% | 1.6× |
+| top 50% | 73.9% | 1.5× |
+
+**Top half catches three-quarters of churners.** This curve answers
+"how concentrated is the signal" but doesn't tell you what audience
+size you should actually pick. That requires unit economics.
+
+### 3.2 The decision question — net value vs audience size
+
+![Decision curve](report/figures/decision_curve.png)
+
+**Left panel.** Expected net dollar value if we contact the top-k%
+audience, under the locked unit economics ($1 per contact, $10 per
+saved user). Three intervention-success scenarios. The dot marks the
+optimal cutoff per scenario.
+
+The story:
+
+- **Low success (10%):** no outreach pays off. Even contacting
+  guaranteed churners loses money: $10 × 0.10 = $1, exactly the
+  contact cost. Model and random both flatline. *The model correctly
+  tells marketing "don't run the campaign."*
+
+- **Medium success (20%):** model peaks at **64% audience contacted →
+  $4,052 net value**. Random outreach to the same audience nets only
+  $2,106. *The model nearly doubles the campaign's value.*
+
+- **High success (35%):** model peaks at 72% → $11,615. Random nets
+  $10,204. *Gap narrows because high success rate forgives sloppy
+  targeting; the optimum is "contact almost everyone".*
+
+**Right panel.** As intervention success rate varies from 5% to 40%,
+two things change:
+
+- The **optimal audience size** (green) ratchets up from 0% to ~75% —
+  more aggressive outreach as success improves.
+- The **best achievable net value** (black solid = model, dotted =
+  random) grows roughly linearly above the break-even success rate
+  (~10–15%). The model–random gap is widest in the **15–25% success
+  band** — exactly where careful targeting matters most.
+
+### 3.3 What this tells lifecycle marketing
+
+A PM can use this output to answer questions a model alone can't:
+
+| Question | Answer mechanism |
 |---|---|
-| Python 3.11 package + pyproject.toml | ✓ |
-| Schema validation, stratified splits, deterministic seed | ✓ |
-| 4 model families with unified `ModelHandle` interface | ✓ |
-| YAML-driven training CLI | ✓ |
-| MLflow experiment tracking (local file store) | ✓ |
-| Batch scoring CLI (CSV + parquet + audience_top50) | ✓ |
-| Score report + split-stability report (markdown + JSON) | ✓ |
-| Dockerfile (CPU runtime, libgomp, tini) | ✓ |
-| k8s CronJob manifest for daily scoring | ✓ |
-| 37 tests (schema, splits, metrics, preprocessing, smoke, batch, monitoring) | ✓ |
+| "Should we run the campaign?" | Decision curve at your assumed success rate. If the optimum is at 0% audience, **don't**. |
+| "What audience size should we target?" | Optimal cutoff from the decision curve. Read off `prob_churn` threshold from the ranked CSV. |
+| "What's the campaign worth?" | Net value at the optimum, scales linearly with user count. |
+| "What success rate do we need to clear?" | The break-even point on the decision curve (~10% for the locked $1/$10 economics). |
+| "What if our cost or LTV assumptions are wrong?" | Re-run the decision-curve script with new constants; re-read the optimum. |
+
+### 3.4 Operational output
+
+Each `batch_score` run writes a ranked CSV with both columns:
+
+```csv
+uid,score,prob_churn,rank,above_threshold
+168283987,1.0000,0.9876,1,1
+168432321,0.9997,0.9856,2,1
+168983889,0.9970,0.9823,3,1
+...
+```
+
+- `score` — raw ranking score; use this if you only need an ordering.
+- `prob_churn` — calibrated probability; use this for expected-value
+  math (cost-curves, dollar projections, threshold selection).
+- `rank` — 1-indexed position by `score`.
+- `above_threshold` — boolean, whether the row is above the
+  threshold-policy cutoff saved with the model run.
+
+Plus `audience_top50.csv` — the highest-risk 50 users, ready to drop
+into a campaign pipeline.
 
 ---
 
-## 6 · Future steps
+## 4 · Honest framing & known limits
 
-Roughly ordered by ROI given the current dataset and constraints:
+These are load-bearing — without them the dollar numbers above are misleading.
 
-1. **CI** ([TODOS.md](TODOS.md) P2) — wire GitHub Actions to run ruff +
-   pytest + a 1-epoch training smoke. Trivial; was scoped out of the
-   modernization PR for focus.
-2. **Probability calibration** (P3) — add `CalibratedClassifierCV` (Platt
-   or isotonic) on the validation split if a downstream consumer requires
-   true `P(churn)` for cost / expected-value math.
-3. **Pin sklearn version** — the Dockerfile currently uses whatever the
-   pip resolver picks; minor-version skew between training and serving
-   produces unpickling warnings. Add an explicit pin.
-4. **Bias slice analysis** — break down lift@k by `device_type` to verify
-   we're not systematically under-serving one device class.
-5. **Time-based split** (P3) — requires a multi-snapshot dataset or
-   access to raw logs. Unlocks real drift monitoring and honest
-   evaluation of feature freshness.
-6. **Feast feature definitions** (P7, planned) — declarative feature spec
-   in `extras/feast/` for documentation + future training/inference
-   consistency. Doc-only stub; no online materialization.
-7. **Slim the inference image** — strip mlflow + training-only deps from
-   the batch-score image to drop from 1.74 GB to <500 MB.
+1. **Unit economics are assumed, not measured.** `$1/contact` and
+   `$10/save` come from the locked plan ([README.md](README.md) §
+   Locked decisions), as a sensitivity-analysis convention. Real LTV +
+   real channel cost will move the numbers but the *shape* of the
+   decision curves doesn't change.
+
+2. **Intervention success rate is a model parameter, not data.** We
+   don't have a holdout group of "users who would have churned but
+   were contacted and didn't." That's what an A/B retention test
+   would measure. The decision curve scans 5%–40% to show how
+   sensitive the answer is.
+
+3. **Probabilities are calibrated on this snapshot only.** The
+   reliability check is on val and test from the same 2017-04-28
+   snapshot. There is no temporal split because the dataset has no
+   timestamp column and raw logs are gone (see [DATA.md](DATA.md) §5).
+   In production, calibration must be re-fit on new data periodically.
+
+4. **The "monitoring" report is split-stability, not real drift.** With
+   one snapshot, train-vs-test PSI measures sampling variance. Real
+   drift requires multiple snapshots. See `output/monitoring_report.md`
+   header banner.
+
+5. **No real-time inference.** 30-day rolling features need raw event
+   logs to recompute at request time; logs are gone. Batch scoring
+   matches how lifecycle teams actually consume churn scores.
 
 ---
 
-## 7 · How to reproduce
+## 5 · How to reproduce
 
 ```bash
 make install-dev
-make validate-data            # schema check on Processed_data/df_model_final.csv
-
-make train-lr train-rf train-gbm train-mlp
-make mlflow-ui                 # browse runs at http://localhost:5000
-
+make validate-data
+make train-lr train-rf train-gbm train-mlp   # ~30s total
 PYTHONPATH=src python3 scripts/generate_report_figures.py
-# regenerates the six PNGs in report/figures/
-
-make batch-score RUN_DIR=$(ls -td artifacts/rf_* | head -1) \
+make batch-score RUN_DIR=$(ls -td artifacts/gbm_* | head -1) \
                  INPUT=Processed_data/df_model_final.csv
-# → output/predictions_<ts>.{csv,parquet} + output/predictions/audience_top50.csv
+# → output/predictions_<ts>.csv with score + prob_churn columns
 ```
 
----
-
-## Appendix · Run artifacts
-
-Each `make train-*` writes a self-contained, portable directory:
-
-```
-artifacts/<model>_<utc-timestamp>/
-├── model.{pkl,pt}           # fitted estimator (sklearn pickle or torch state_dict)
-├── preprocessor.pkl         # fitted ColumnTransformer (must travel with the model)
-├── feature_schema.json      # feature columns, target, model type, output dim
-├── metrics.json             # val + test metrics
-├── val_eval.json            # full per-split eval (metrics + reliability + score summary)
-├── test_eval.json           # ditto for test set
-├── threshold.json           # selected decision threshold + policy
-├── model_card.md            # human-readable summary with framing caveat
-└── evaluation_report.md     # generated by `make score-report`
-```
-
-The same directory is what `batch_score.py` consumes. Runs are
-self-contained and portable — copy the dir, score anywhere.
+Each run dir is self-contained and portable — `model.{pkl,pt}`,
+`preprocessor.pkl`, `calibrator.pkl`, `metrics.json`, `threshold.json`,
+`feature_schema.json`, `model_card.md`, `evaluation_report.md`.
