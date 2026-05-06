@@ -181,6 +181,82 @@ top-3 across both tree models. Engagement-quality features
 (`mean_percent_last_*`, `tot_playtime_last_*`) cluster in the top 10
 — *how* a user listens is almost as informative as *whether* they listen.
 
+### 2.6 How we tracked + compared runs — MLflow
+
+Every `make train-*` invocation logs to a local MLflow file store
+(`./mlruns`), so comparison happens without grep'ing JSON files by
+hand. Each run captures: the model type and seed, every hyperparameter,
+fit-time, all val/test/calibrated metrics, the chosen threshold, and
+the full `artifacts/<run>/` directory.
+
+**A single training run, end to end:**
+
+```
+$ make train-lr
+python -m musicbox_churn.training.train --config configs/train_lr.yaml
+2026-05-06 13:38:52 WARNING musicbox_churn.data.load_data dropping 10 duplicate uid rows (keeping first)
+2026-05-06 13:38:55 INFO __main__ done: artifacts/lr_20260506T203854Z (val PR-AUC=0.9181)
+artifacts/lr_20260506T203854Z
+```
+
+**Comparing across runs from the CLI:**
+
+```python
+import mlflow
+mlflow.set_tracking_uri("file:./mlruns")
+runs = mlflow.search_runs(experiment_names=["musicbox_churn"])
+runs[["params.model_type", "metrics.val_pr_auc", "metrics.test_pr_auc",
+      "metrics.test_brier", "metrics.fit_seconds"]].sort_values(
+      "metrics.val_pr_auc", ascending=False)
+```
+
+…produces (latest run per model_type, real numbers from the file store):
+
+| run name | model | val PR-AUC | test PR-AUC | test Brier | fit (s) |
+|---|---|---:|---:|---:|---:|
+| `rf_20260506T190027Z`  | rf  | **0.9340** | **0.9400** | **0.1118** | 0.91 |
+| `gbm_20260506T203818Z` | gbm | 0.9336 | 0.9385 | 0.1136 | 43.97 |
+| `mlp_20260506T190042Z` | mlp | 0.9275 | 0.9354 | 0.1146 | 6.56 |
+| `lr_20260506T190022Z`  | lr  | 0.9181 | 0.9294 | 0.1198 | 1.47 |
+
+Or pop open the UI:
+
+```bash
+make mlflow-ui   # http://localhost:5000
+```
+
+…which gives the same data sortable, filterable, and side-by-side.
+
+**Where MLflow earns its keep — a sweep.** A natural follow-up: does
+LightGBM benefit from a richer trees? Sweep `num_leaves` ∈ {15, 31, 63}
+(see [configs/sweep/](configs/sweep/)):
+
+| num_leaves | val PR-AUC | test PR-AUC | fit (s) |
+|---:|---:|---:|---:|
+| 15 | 0.9335 | 0.9386 | 10.4 |
+| 31 (default) | 0.9333 | 0.9386 | 1.4 |
+| 63 | 0.9336 | 0.9385 | 44.0 |
+
+PR-AUC moves by **0.0003 across a 4× change** in tree complexity — well
+inside noise. **Default is fine; bigger trees just burn fit-time.** That
+finding took one MLflow query against three runs that were already on
+disk; no notebook, no manual bookkeeping.
+
+**Why it pays off** even at this small scale:
+
+- **Comparison without grep.** The `mlflow.search_runs` query above is
+  what would otherwise be a `find artifacts -name metrics.json | xargs jq`
+  pipeline.
+- **Param ↔ metric pairing.** When a future RF run lands at 0.92 instead
+  of 0.94, the param diff is right there in the UI. No detective work.
+- **Cheap insurance.** ~1 MB per run on disk, no DB, no remote server,
+  works offline. `rm -rf mlruns/` and you've lost nothing critical
+  (the same data is also in `artifacts/<run>/metrics.json`).
+
+What we're deliberately **not** using: model registry, remote tracking
+server, A/B promotion tags. All can be bolted on later without touching
+training code.
+
 ---
 
 ## 3 · So what — from scores to "who should we contact"

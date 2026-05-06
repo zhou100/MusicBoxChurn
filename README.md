@@ -95,6 +95,7 @@ make validate-data       # schema check on Processed_data/df_model_final.csv
 make test                # 45 tests
 
 make train-lr            # also: train-rf, train-gbm, train-mlp
+                         # → artifacts/<model>_<ts>/, logged to MLflow
 make mlflow-ui           # browse runs at http://localhost:5000
 
 # score a CSV with any trained run
@@ -106,6 +107,29 @@ make batch-score RUN_DIR=$(ls -td artifacts/gbm_* | head -1) \
 make score-report RUN_DIR=...    # → <run>/evaluation_report.md
 make monitoring-report           # → output/monitoring_report.md
 ```
+
+### What a training run produces
+
+Each `make train-*` invocation:
+
+1. Loads + validates the CSV, splits 70/15/15 (seed=42), fits the
+   preprocessor and the model on train, evaluates on val and test, fits
+   an isotonic calibrator on val.
+2. Writes a self-contained run directory:
+   `artifacts/<model>_<ts>/{model.pkl,preprocessor.pkl,calibrator.pkl,metrics.json,threshold.json,feature_schema.json,model_card.md,val_eval.json,test_eval.json}`.
+3. Logs the same data — params, metrics (raw + calibrated), and every
+   artifact — to MLflow at `./mlruns`.
+
+Comparing across runs is one query (or one `make mlflow-ui`):
+
+| run | model | val PR-AUC | test PR-AUC | test Brier | fit (s) |
+|---|---|---:|---:|---:|---:|
+| `rf_20260506T190027Z`  | rf  | **0.934** | **0.940** | **0.112** | 0.91 |
+| `gbm_20260506T203818Z` | gbm | 0.934 | 0.939 | 0.114 | 43.97 |
+| `mlp_20260506T190042Z` | mlp | 0.928 | 0.935 | 0.115 | 6.56 |
+| `lr_20260506T190022Z`  | lr  | 0.918 | 0.929 | 0.120 | 1.47 |
+
+Worked example of an MLflow-backed sweep in [REPORT.md § 2.6](REPORT.md#26-how-we-tracked--compared-runs--mlflow).
 
 Each `make train-*` writes a self-contained, portable run directory
 under `artifacts/<model>_<ts>/`: `model.{pkl,pt}`, `preprocessor.pkl`,
