@@ -13,6 +13,7 @@ calibrated scores, and writes:
 
 Run from repo root: PYTHONPATH=src python3 scripts/generate_report_figures.py
 """
+
 from __future__ import annotations
 
 import json
@@ -29,21 +30,26 @@ from sklearn.metrics import precision_recall_curve
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from musicbox_churn.data.load_data import load_csv
-from musicbox_churn.data.schema import (
+from musicbox_churn.data.load_data import load_csv  # noqa: E402
+from musicbox_churn.data.schema import (  # noqa: E402
     CATEGORICAL_FEATURE_COLUMNS,
     FEATURE_COLUMNS,
     NUMERIC_FEATURE_COLUMNS,
     TARGET_COL,
 )
-from musicbox_churn.data.splits import stratified_split
-from musicbox_churn.inference.batch_score import load_run
+from musicbox_churn.data.splits import stratified_split  # noqa: E402
+from musicbox_churn.inference.batch_score import load_run  # noqa: E402
 
 FIG_DIR = ROOT / "report" / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 PALETTE = {"lr": "#4C72B0", "rf": "#DD8452", "gbm": "#55A467", "mlp": "#C44E52"}
-NICE = {"lr": "Logistic Regression", "rf": "Random Forest", "gbm": "LightGBM", "mlp": "MLP (PyTorch)"}
+NICE = {
+    "lr": "Logistic Regression",
+    "rf": "Random Forest",
+    "gbm": "LightGBM",
+    "mlp": "MLP (PyTorch)",
+}
 
 # Locked unit economics (configs/inference.yaml). Reframe as
 # "ranked-audience economics under assumed unit costs", not real revenue.
@@ -93,6 +99,7 @@ def get_test_split_scores(runs: dict[str, Path]) -> dict[str, Scores]:
 # Figures
 # ---------------------------------------------------------------------------
 
+
 def fig_model_comparison(runs: dict[str, Path]) -> None:
     rows = []
     for mtype, d in runs.items():
@@ -110,13 +117,17 @@ def fig_model_comparison(runs: dict[str, Path]) -> None:
     df = pd.DataFrame(rows).sort_values("PR-AUC", ascending=False).reset_index(drop=True)
 
     fig, axes = plt.subplots(1, 4, figsize=(20, 5.5))
-    for ax, metric in zip(axes, ["PR-AUC", "ROC-AUC", "lift@10pct", "Brier (lower=better)"]):
+    for ax, metric in zip(
+        axes, ["PR-AUC", "ROC-AUC", "lift@10pct", "Brier (lower=better)"], strict=False
+    ):
         colors = [PALETTE[k] for k in df["key"]]
         bars = ax.bar(df["model"], df[metric], color=colors, edgecolor="black", linewidth=0.8)
         ax.set_title(metric)
         ax.tick_params(axis="x", rotation=20)
-        for b, v in zip(bars, df[metric]):
-            ax.text(b.get_x() + b.get_width() / 2, v, f"{v:.3f}", ha="center", va="bottom", fontsize=12)
+        for b, v in zip(bars, df[metric], strict=False):
+            ax.text(
+                b.get_x() + b.get_width() / 2, v, f"{v:.3f}", ha="center", va="bottom", fontsize=12
+            )
         ax.set_ylim(top=ax.get_ylim()[1] * 1.1)
     fig.suptitle("Test-set metrics across models (n=8,692; prevalence=0.621)", y=1.02, fontsize=18)
     fig.tight_layout()
@@ -158,25 +169,41 @@ def _reliability_points(y: np.ndarray, s: np.ndarray, n_bins: int = 10):
 
 def fig_reliability(scored: dict[str, Scores]) -> None:
     """One panel per model, showing raw + calibrated reliability overlaid."""
-    n = len(scored)
     fig, axes = plt.subplots(2, 2, figsize=(14, 12), sharex=True, sharey=True)
-    for ax, (mtype, (y, raw, cal)) in zip(axes.ravel(), scored.items()):
+    for ax, (mtype, (y, raw, cal)) in zip(axes.ravel(), scored.items(), strict=False):
         ax.plot([0, 1], [0, 1], "--", color="grey", label="Perfect")
         x_r, y_r, w_r = _reliability_points(y, raw)
-        ax.plot(x_r, y_r, marker="o", color=PALETTE[mtype], linewidth=2,
-                label="Raw scores", markersize=8)
+        ax.plot(
+            x_r,
+            y_r,
+            marker="o",
+            color=PALETTE[mtype],
+            linewidth=2,
+            label="Raw scores",
+            markersize=8,
+        )
         if cal is not None:
             x_c, y_c, w_c = _reliability_points(y, cal)
-            ax.plot(x_c, y_c, marker="s", color="black", linewidth=2, alpha=0.65,
-                    label="Calibrated (isotonic)", markersize=7, linestyle=":")
+            ax.plot(
+                x_c,
+                y_c,
+                marker="s",
+                color="black",
+                linewidth=2,
+                alpha=0.65,
+                label="Calibrated (isotonic)",
+                markersize=7,
+                linestyle=":",
+            )
         ax.set_title(NICE[mtype])
         ax.set_xlabel("Mean predicted score / probability")
         ax.set_ylabel("Empirical positive rate")
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.legend(loc="upper left", fontsize=11)
-    fig.suptitle("Reliability — raw scores vs isotonic-calibrated probabilities",
-                 y=1.0, fontsize=16)
+    fig.suptitle(
+        "Reliability — raw scores vs isotonic-calibrated probabilities", y=1.0, fontsize=16
+    )
     fig.tight_layout()
     fig.savefig(FIG_DIR / "reliability.png", dpi=140, bbox_inches="tight")
     plt.close(fig)
@@ -190,11 +217,13 @@ def fig_lift_curve(scored: dict[str, Scores]) -> None:
         cum_pos = np.cumsum(y_sorted)
         cum_pct_audience = np.arange(1, len(y) + 1) / len(y)
         cum_pct_caught = cum_pos / cum_pos[-1]
-        ax.plot(cum_pct_audience, cum_pct_caught, label=NICE[mtype], color=PALETTE[mtype], linewidth=2.5)
+        ax.plot(
+            cum_pct_audience, cum_pct_caught, label=NICE[mtype], color=PALETTE[mtype], linewidth=2.5
+        )
     ax.plot([0, 1], [0, 1], "--", color="grey", label="Random")
     ax.set_xlabel("Fraction of audience contacted (sorted by score)")
     ax.set_ylabel("Fraction of churners caught")
-    ax.set_title("Cumulative-gains curve — \"How much budget catches how much churn?\"")
+    ax.set_title('Cumulative-gains curve — "How much budget catches how much churn?"')
     ax.legend(loc="lower right")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1.02)
@@ -228,24 +257,34 @@ def fig_decision_curve(scored: dict[str, Scores]) -> None:
     cum_caught_random = prevalence * ks
 
     scenarios = [
-        ("low (10%)",   0.10, "#888888"),
+        ("low (10%)", 0.10, "#888888"),
         ("medium (20%)", 0.20, PALETTE["gbm"]),
-        ("high (35%)",  0.35, PALETTE["rf"]),
+        ("high (35%)", 0.35, PALETTE["rf"]),
     ]
     frac = ks / n
     for label, r, color in scenarios:
         net_model = cum_caught_model * r * VALUE_PER_RETAINED - ks * COST_PER_INTERVENTION
         net_rand = cum_caught_random * r * VALUE_PER_RETAINED - ks * COST_PER_INTERVENTION
         ax.plot(frac, net_model, color=color, linewidth=2.6, label=f"Model — {label} success")
-        ax.plot(frac, net_rand, color=color, linewidth=1.4, linestyle=":", alpha=0.85,
-                label=f"Random — {label}")
+        ax.plot(
+            frac,
+            net_rand,
+            color=color,
+            linewidth=1.4,
+            linestyle=":",
+            alpha=0.85,
+            label=f"Random — {label}",
+        )
         argmax = int(np.argmax(net_model))
-        ax.scatter([frac[argmax]], [net_model[argmax]], color=color, edgecolor="black",
-                   s=140, zorder=5)
+        ax.scatter(
+            [frac[argmax]], [net_model[argmax]], color=color, edgecolor="black", s=140, zorder=5
+        )
     ax.axhline(0, color="grey", linewidth=1)
     ax.set_xlabel("Fraction of audience contacted")
-    ax.set_ylabel(f"Expected net value ($)\n(${VALUE_PER_RETAINED:.0f}/save, "
-                  f"${COST_PER_INTERVENTION:.0f}/contact, n={n:,})")
+    ax.set_ylabel(
+        f"Expected net value ($)\n(${VALUE_PER_RETAINED:.0f}/save, "
+        f"${COST_PER_INTERVENTION:.0f}/contact, n={n:,})"
+    )
     ax.set_title(
         f"Decision curve — {NICE[mtype]} vs random outreach\n"
         "(dot = optimal cutoff under each scenario)",
@@ -268,21 +307,45 @@ def fig_decision_curve(scored: dict[str, Scores]) -> None:
         optimal_nets.append(net_model[i])
         rand_nets.append(max(0.0, net_rand[j]))
     ax2 = ax.twinx()
-    ax.plot(success_rates * 100, np.array(optimal_fracs) * 100, color=PALETTE[mtype],
-            linewidth=2.6, marker="o", markersize=5)
+    ax.plot(
+        success_rates * 100,
+        np.array(optimal_fracs) * 100,
+        color=PALETTE[mtype],
+        linewidth=2.6,
+        marker="o",
+        markersize=5,
+    )
     ax.set_xlabel("Assumed intervention success rate (%)")
     ax.set_ylabel("Optimal audience contacted (%)", color=PALETTE[mtype])
     ax.tick_params(axis="y", colors=PALETTE[mtype])
 
-    ax2.plot(success_rates * 100, optimal_nets, color="black", linewidth=2,
-             linestyle="--", marker="s", markersize=5, label="Model")
-    ax2.plot(success_rates * 100, rand_nets, color="grey", linewidth=1.5,
-             linestyle=":", marker="x", markersize=5, label="Random outreach")
+    ax2.plot(
+        success_rates * 100,
+        optimal_nets,
+        color="black",
+        linewidth=2,
+        linestyle="--",
+        marker="s",
+        markersize=5,
+        label="Model",
+    )
+    ax2.plot(
+        success_rates * 100,
+        rand_nets,
+        color="grey",
+        linewidth=1.5,
+        linestyle=":",
+        marker="x",
+        markersize=5,
+        label="Random outreach",
+    )
     ax2.set_ylabel("Best achievable net value ($)", color="black")
     ax2.legend(loc="upper left", fontsize=11)
 
-    ax.set_title(f"Sensitivity: optimal cutoff and best net value vs assumed success\n({NICE[mtype]})",
-                 fontsize=14)
+    ax.set_title(
+        f"Sensitivity: optimal cutoff and best net value vs assumed success\n({NICE[mtype]})",
+        fontsize=14,
+    )
     fig.tight_layout()
     fig.savefig(FIG_DIR / "decision_curve.png", dpi=140, bbox_inches="tight")
     plt.close(fig)
@@ -316,10 +379,16 @@ def fig_feature_importance(runs: dict[str, Path]) -> None:
     fig, axes = plt.subplots(1, len(panels), figsize=(8 * len(panels), 9), sharey=False)
     if len(panels) == 1:
         axes = [axes]
-    for ax, (mtype, imp) in zip(axes, panels):
+    for ax, (mtype, imp) in zip(axes, panels, strict=False):
         names = feature_names[: len(imp)]
         order = np.argsort(imp)[-15:]
-        ax.barh(np.array(names)[order], imp[order], color=PALETTE[mtype], edgecolor="black", linewidth=0.6)
+        ax.barh(
+            np.array(names)[order],
+            imp[order],
+            color=PALETTE[mtype],
+            edgecolor="black",
+            linewidth=0.6,
+        )
         ax.set_title(f"{NICE[mtype]} — top 15 features")
         ax.set_xlabel("Importance" + ("" if mtype != "gbm" else " (split gain)"))
     fig.tight_layout()
@@ -332,8 +401,17 @@ def fig_score_histogram(scored: dict[str, Scores]) -> None:
     y, _raw, cal = scored[mtype]
     s = cal if cal is not None else _raw
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.hist(s[y == 0], bins=40, alpha=0.65, label="Active (label=0)", color="#4C72B0", edgecolor="white")
-    ax.hist(s[y == 1], bins=40, alpha=0.65, label="Churned (label=1)", color="#DD8452", edgecolor="white")
+    ax.hist(
+        s[y == 0], bins=40, alpha=0.65, label="Active (label=0)", color="#4C72B0", edgecolor="white"
+    )
+    ax.hist(
+        s[y == 1],
+        bins=40,
+        alpha=0.65,
+        label="Churned (label=1)",
+        color="#DD8452",
+        edgecolor="white",
+    )
     ax.set_xlabel("Calibrated P(churn)")
     ax.set_ylabel("Users (test set)")
     ax.set_title(f"Calibrated probability distribution by true label — {NICE[mtype]}")

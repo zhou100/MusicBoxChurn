@@ -11,7 +11,13 @@ from musicbox_churn.data.schema import FEATURE_COLUMNS, TARGET_COL
 @pytest.fixture
 def smoke_csv(tmp_path, sample_df):
     p = tmp_path / "smoke.csv"
-    sample_df[[*([col for col in sample_df.columns if col not in FEATURE_COLUMNS + [TARGET_COL]]), TARGET_COL, *FEATURE_COLUMNS]].to_csv(p, index=False)
+    sample_df[
+        [
+            *([col for col in sample_df.columns if col not in FEATURE_COLUMNS + [TARGET_COL]]),
+            TARGET_COL,
+            *FEATURE_COLUMNS,
+        ]
+    ].to_csv(p, index=False)
     return p
 
 

@@ -1,5 +1,7 @@
 # Music Box churn-risk scoring
 
+[![CI](https://github.com/zhou100/MusicBoxChurn/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/zhou100/MusicBoxChurn/actions/workflows/ci.yml)
+
 Churn-risk scoring on the Music Box dataset (~58k users) that goes from
 raw feature vectors → calibrated probabilities → a budget-aware decision
 rule that tells lifecycle marketing **who to contact and when it stops

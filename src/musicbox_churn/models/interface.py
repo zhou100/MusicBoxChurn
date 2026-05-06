@@ -12,7 +12,7 @@ class ModelHandle(ABC):
     name: str
 
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "ModelHandle": ...
+    def fit(self, X: np.ndarray, y: np.ndarray) -> ModelHandle: ...
 
     @abstractmethod
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
@@ -23,4 +23,4 @@ class ModelHandle(ABC):
 
     @classmethod
     @abstractmethod
-    def load(cls, path: str | Path) -> "ModelHandle": ...
+    def load(cls, path: str | Path) -> ModelHandle: ...

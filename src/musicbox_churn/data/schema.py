@@ -8,12 +8,8 @@ TARGET_COL = "label"
 WINDOWS_SHORT = (1, 3, 7, 14, 30)
 WINDOWS_RECENT = (7, 14, 30)
 
-FREQ_COLUMNS = [
-    f"freq_{e}_last_{w}" for e in ("P", "D", "S") for w in WINDOWS_SHORT
-]
-RECENT_COLUMNS = [
-    f"recent_{e}_last_{w}" for e in ("P", "D", "S") for w in WINDOWS_RECENT
-]
+FREQ_COLUMNS = [f"freq_{e}_last_{w}" for e in ("P", "D", "S") for w in WINDOWS_SHORT]
+RECENT_COLUMNS = [f"recent_{e}_last_{w}" for e in ("P", "D", "S") for w in WINDOWS_RECENT]
 TOT_PLAYTIME_COLUMNS = [f"tot_playtime_last_{w}" for w in WINDOWS_SHORT]
 SONGS_FULL_COLUMNS = [f"songs_full_last_{w}" for w in WINDOWS_SHORT]
 MEAN_PERCENT_COLUMNS = [f"mean_percent_last_{w}" for w in WINDOWS_SHORT]

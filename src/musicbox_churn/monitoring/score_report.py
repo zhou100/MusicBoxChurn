@@ -22,7 +22,9 @@ def _table(metrics: dict[str, float]) -> str:
 def _reliability_table(rel: dict[str, list[float]]) -> str:
     header = "| bin | mean_pred | empirical_rate | count |\n|---|---|---|---|"
     rows = []
-    for i, (mp, er, c) in enumerate(zip(rel["mean_pred"], rel["empirical_rate"], rel["count"])):
+    for i, (mp, er, c) in enumerate(
+        zip(rel["mean_pred"], rel["empirical_rate"], rel["count"], strict=False)
+    ):
         if c == 0:
             rows.append(f"| {i} | — | — | 0 |")
         else:

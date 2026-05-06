@@ -5,6 +5,7 @@ single snapshot to surface sampling variance and obvious split anomalies.
 True production drift requires a second snapshot taken after deployment
 (see TODOS.md, time-based-split entry).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -65,7 +66,9 @@ def split_stability(
         feature_psi.append(
             {
                 "feature": col,
-                "psi_train_vs_val": population_stability_index(train[col].to_numpy(), val[col].to_numpy()),
+                "psi_train_vs_val": population_stability_index(
+                    train[col].to_numpy(), val[col].to_numpy()
+                ),
                 "psi_train_vs_test": population_stability_index(
                     train[col].to_numpy(), test[col].to_numpy()
                 ),
@@ -94,7 +97,9 @@ def _band(psi: float) -> str:
 
 
 def render_report(stats: dict) -> str:
-    feats = sorted(stats["feature_psi"], key=lambda r: -max(r["psi_train_vs_val"], r["psi_train_vs_test"]))
+    feats = sorted(
+        stats["feature_psi"], key=lambda r: -max(r["psi_train_vs_val"], r["psi_train_vs_test"])
+    )
     rows = [
         f"| {r['feature']} | {r['psi_train_vs_val']:.4f} ({_band(r['psi_train_vs_val'])}) "
         f"| {r['psi_train_vs_test']:.4f} ({_band(r['psi_train_vs_test'])}) |"

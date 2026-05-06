@@ -28,7 +28,7 @@ class ScoreCalibrator:
         self.method = method
         self._estimator: IsotonicRegression | LogisticRegression | None = None
 
-    def fit(self, scores: np.ndarray, labels: np.ndarray) -> "ScoreCalibrator":
+    def fit(self, scores: np.ndarray, labels: np.ndarray) -> ScoreCalibrator:
         scores = np.asarray(scores, dtype=float).ravel()
         labels = np.asarray(labels, dtype=int).ravel()
         if self.method == "isotonic":
@@ -51,7 +51,7 @@ class ScoreCalibrator:
         joblib.dump({"method": self.method, "estimator": self._estimator}, path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "ScoreCalibrator":
+    def load(cls, path: str | Path) -> ScoreCalibrator:
         blob = joblib.load(path)
         c = cls(method=blob["method"])
         c._estimator = blob["estimator"]

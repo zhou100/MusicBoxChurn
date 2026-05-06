@@ -83,9 +83,7 @@ def score(
     sample_path = sample_dir / "audience_top50.csv"
     out.head(top_n).to_csv(sample_path, index=False)
 
-    logger.info(
-        "scored %d rows; wrote %s, %s, %s", len(out), csv_path, parquet_path, sample_path
-    )
+    logger.info("scored %d rows; wrote %s, %s, %s", len(out), csv_path, parquet_path, sample_path)
     return {"csv": csv_path, "parquet": parquet_path, "audience": sample_path}
 
 

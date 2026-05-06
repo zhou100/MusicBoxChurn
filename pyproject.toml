@@ -36,9 +36,21 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [
+    "archive",
+    "mlruns",
+    "output",
+    "artifacts",
+    "report",
+    "Processed_data",
+    "extras/feast",  # feast is an optional dep; lint would fail without it installed
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+# UP017 (datetime.UTC) and UP042 (StrEnum) are 3.11+ idioms; project requires 3.11
+# but local dev sometimes runs 3.10. Keep the older form for compatibility.
+ignore = ["UP017", "UP042"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

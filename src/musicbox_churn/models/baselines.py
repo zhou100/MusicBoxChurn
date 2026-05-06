@@ -17,7 +17,7 @@ class SklearnHandle(ModelHandle):
         self.name = name
         self.estimator = estimator
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "SklearnHandle":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> SklearnHandle:
         self.estimator.fit(X, y)
         return self
 
@@ -28,7 +28,7 @@ class SklearnHandle(ModelHandle):
         joblib.dump({"name": self.name, "estimator": self.estimator}, path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "SklearnHandle":
+    def load(cls, path: str | Path) -> SklearnHandle:
         blob = joblib.load(path)
         return cls(name=blob["name"], estimator=blob["estimator"])
 

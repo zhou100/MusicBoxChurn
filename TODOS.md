@@ -4,23 +4,15 @@ Items considered but deferred. Captured for future revisit.
 
 ## Completed
 
+### CI: GitHub Actions — shipped
+**What:** [.github/workflows/ci.yml](.github/workflows/ci.yml) runs `ruff check`, `ruff format --check`, and `pytest` on every push to `master` and on every PR. The pytest job doubles as the training-smoke gate because `tests/test_training_smoke.py` fits LR / GBM / MLP end-to-end on synthetic fixtures. Two parallel jobs, ~3–5 min wall clock with the CPU torch wheel.
+
 ### Probability calibration (Platt or isotonic) — shipped
 **What:** Fit a calibrator on the validation split's `(raw_score, label)` and apply it at scoring time so outputs are usable for expected-value math.
 
 **How shipped:** `ScoreCalibrator` (isotonic by default, Platt option) in [src/musicbox_churn/training/calibration.py](src/musicbox_churn/training/calibration.py). `train.py` fits on val, saves `calibrator.pkl` per run. `batch_score.py` applies it and emits both `score` (raw ranking) and `prob_churn` (calibrated). Reliability and decision-curve figures in [REPORT.md](REPORT.md).
 
 **Surprise finding:** these models are nearly calibrated out of the box — isotonic moves test Brier ≤0.2% per model. Atypical for tree ensembles, but the slot exists for future retrains that may be less well-behaved.
-
-## P2
-
-### CI: GitHub Actions
-**What:** Wire `.github/workflows/ci.yml` to run `ruff check`, `ruff format --check`, `pytest`, and a 1-epoch training smoke on push and PR.
-
-**Why:** Currently `make test` is the manual gate. CI prevents regressions sneaking in via merges and produces a visible green badge — strong "this person ships" signal.
-
-**Pros:** Catches breakage early. Documents how the project is supposed to run. Required for any team setting.
-
-**Cons:** None significant. Trivial to add.
 
 ## P3
 

@@ -55,7 +55,7 @@ class TabularMLPHandle(ModelHandle):
         self.model: _MLP | None = None
         self.in_dim: int | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "TabularMLPHandle":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> TabularMLPHandle:
         torch.manual_seed(self.seed)
         self.in_dim = X.shape[1]
         self.model = _MLP(self.in_dim, self.hidden, self.dropout).to(self.device)
@@ -109,7 +109,7 @@ class TabularMLPHandle(ModelHandle):
         torch.save({"state_dict": self.model.state_dict(), "meta": meta}, path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "TabularMLPHandle":
+    def load(cls, path: str | Path) -> TabularMLPHandle:
         blob = torch.load(path, map_location="cpu", weights_only=False)
         meta: dict[str, Any] = blob["meta"]
         h = cls(

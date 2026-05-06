@@ -62,7 +62,7 @@ def _write_model_card(
     test_metrics: dict,
     threshold_info: dict,
 ) -> None:
-    text = f"""# Model card — {cfg['model_type']}
+    text = f"""# Model card — {cfg["model_type"]}
 
 Run: `{out_dir.name}`
 Created: {datetime.now(timezone.utc).isoformat()}
