@@ -1,6 +1,6 @@
 # Data Provenance and Feature Definitions
 
-This document explains how the modeling table [Processed_data/df_model_final.csv](Processed_data/df_model_final.csv) was produced from raw Music Box event logs in the original capstone. The modernized ML system in this repo treats this table as the **offline source of truth** and does not re-run the upstream raw-log pipeline. This file exists to document what the features mean, what label leakage looks like in this domain, and what limitations follow from only having the processed table.
+This document explains how the modeling table [Processed_data/df_model_final.csv](Processed_data/df_model_final.csv) was produced from raw Music Box event logs. The pipeline in this repo treats this table as the **offline source of truth** and does not re-run the upstream raw-log processing. This file documents what the features mean, what label leakage looks like in this domain, and what limitations follow from only having the processed table.
 
 ## 1. Source data (not in this repo)
 
@@ -12,13 +12,13 @@ The original project ingested three streams of user-level event logs from the Mu
 | `down` | `uid, device, song_id, song_name, singer, paid_flag, date` | a user downloaded a song |
 | `search` | `uid, device, time_stamp, search_query, date` | a user issued a search |
 
-Logs were daily-rotated tarballs (`YYYYMMDD_*.log.tar.gz`). The shell scripts [0_create_data_folders.sh](0_create_data_folders.sh) and [2_unpack_and_clean_files.sh](2_unpack_and_clean_files.sh) untar them, append the date (parsed from the filename) to each row, and concatenate to `all_play_log` / `all_down_log` / `all_search_log`.
+Logs were daily-rotated tarballs (`YYYYMMDD_*.log.tar.gz`). The shell scripts [archive/0_create_data_folders.sh](archive/0_create_data_folders.sh) and [archive/2_unpack_and_clean_files.sh](archive/2_unpack_and_clean_files.sh) untar them, append the date (parsed from the filename) to each row, and concatenate to `all_play_log` / `all_down_log` / `all_search_log`.
 
-**The raw logs are no longer available** — they are not in this repo and the original copies are gone. The notebooks [1_download_data.ipynb](1_download_data.ipynb), [2_unpack_and_clean_files.sh](2_unpack_and_clean_files.sh), and [3_etl_down_sample_by_user.ipynb](3_etl_down_sample_by_user.ipynb) are kept for documentation only; they cannot be re-run. Everything downstream of step 3 (the contents of [Processed_data/](Processed_data/)) is what we have, and that is what the modernized pipeline will work with.
+**The raw logs are no longer available** — they are not in this repo and the original copies are gone. The original ingestion notebooks ([archive/1_download_data.ipynb](archive/1_download_data.ipynb), [archive/2_unpack_and_clean_files.sh](archive/2_unpack_and_clean_files.sh), [archive/3_etl_down_sample_by_user.ipynb](archive/3_etl_down_sample_by_user.ipynb)) are kept for documentation only; they cannot be re-run. Everything downstream of step 3 (the contents of [Processed_data/](Processed_data/)) is what we have, and that is what the current pipeline works with.
 
-## 2. Cleaning and downsampling ([3_etl_down_sample_by_user.ipynb](3_etl_down_sample_by_user.ipynb))
+## 2. Cleaning and downsampling ([archive/3_etl_down_sample_by_user.ipynb](archive/3_etl_down_sample_by_user.ipynb))
 
-> The contents of [Processed_data/](Processed_data/) are the **outputs of this step** (and step 4 below) — they are the starting point of the modernized pipeline. Steps 2 and 3 here describe how those files came to exist, but cannot be re-executed without the raw logs.
+> The contents of [Processed_data/](Processed_data/) are the **outputs of this step** (and step 4 below) — they are the starting point of the current pipeline. Steps 2 and 3 here describe how those files came to exist, but cannot be re-executed without the raw logs.
 
 Two cleaning steps were applied at the user level before any feature generation:
 
@@ -27,7 +27,7 @@ Two cleaning steps were applied at the user level before any feature generation:
 
 After cleaning, the three streams are unioned into a single long event table with schema `(uid, event, song_id, date)` where `event ∈ {P, D, S}` for play / download / search.
 
-## 3. Label definition ([4_feature_label_generation_with_spark.ipynb](4_feature_label_generation_with_spark.ipynb))
+## 3. Label definition ([archive/4_feature_label_generation_with_spark.ipynb](archive/4_feature_label_generation_with_spark.ipynb))
 
 Churn is defined by **inactivity in a fixed forward window**:
 
@@ -44,7 +44,7 @@ Class balance in the resulting table is roughly **60% churn / 40% active**, whic
 
 ### Why this matters for leakage
 
-Because the label is defined by activity **strictly after** `feature_window_end_date = 2017-04-28`, any feature built only from events on or before that date is leakage-safe by construction. The schema validator in this repo encodes this implicitly: it checks that no feature column is derived from events in the label window, but since we no longer have access to the raw event stream, this is a structural assumption inherited from the upstream pipeline rather than something we can re-verify here. **This is a documented limitation** — the modernization can validate the processed table, but cannot re-prove leakage safety against logs it does not possess.
+Because the label is defined by activity **strictly after** `feature_window_end_date = 2017-04-28`, any feature built only from events on or before that date is leakage-safe by construction. The schema validator in this repo encodes this implicitly: it checks that no feature column is derived from events in the label window, but since we no longer have access to the raw event stream, this is a structural assumption inherited from the upstream pipeline rather than something we can re-verify here. **This is a documented limitation** — we can validate the processed table, but cannot re-prove leakage safety against logs we do not possess.
 
 ## 4. Feature engineering
 
@@ -106,7 +106,7 @@ Derived from the `device` field in the play log; the user profile data was other
 - **Target:** `label` ∈ {0, 1} where 1 = churned (no activity 2017-04-29 → 2017-05-12).
 - **No timestamp column.** The snapshot date is implicit (2017-04-28); the table holds one row per user at that single snapshot.
 
-### Implications for the modernized pipeline
+### Implications for the pipeline
 
 1. **Splitting.** With no timestamp column and a single snapshot, true temporal evaluation is impossible from this table alone. The pipeline uses **stratified train / val / test splits** and documents that this is a regression from the ideal time-based split a production system would use.
 2. **Drift monitoring.** Without multiple snapshots, "drift" is simulated by comparing train vs. holdout feature distributions, not real production-vs-baseline drift over time.

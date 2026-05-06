@@ -5,10 +5,9 @@
 > not import from here. Tests do not exercise it. CI does not validate
 > it. It exists to document **shape**, not to ship code.
 
-This split was an explicit decision in the locked plan: the modernization
-PR ships a small, honest core (data → train → batch-score → monitor),
-and any infrastructure that would imply a larger product than what's
-actually here lives under `extras/` with a banner saying so.
+The core ships a small, honest pipeline (data → train → batch-score →
+monitor). Anything that would imply a larger product than what's actually
+here lives under `extras/` with a banner saying so.
 
 | Stub | Purpose | Status |
 |---|---|---|

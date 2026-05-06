@@ -8,7 +8,7 @@
 ## What this is
 
 A Feast 0.40+ feature_repo that declares — *as a contract* — the entity,
-features, and offline source the modernized pipeline reads from. Anyone
+features, and offline source the pipeline reads from. Anyone
 inspecting the repo can answer:
 
 - What is the entity grain? (`uid`, int64)

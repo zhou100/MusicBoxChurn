@@ -192,7 +192,7 @@ size you should actually pick. That requires unit economics.
 ![Decision curve](report/figures/decision_curve.png)
 
 **Left panel.** Expected net dollar value if we contact the top-k%
-audience, under the locked unit economics ($1 per contact, $10 per
+audience, under the assumed unit economics ($1 per contact, $10 per
 saved user). Three intervention-success scenarios. The dot marks the
 optimal cutoff per scenario.
 
@@ -230,7 +230,7 @@ A PM can use this output to answer questions a model alone can't:
 | "Should we run the campaign?" | Decision curve at your assumed success rate. If the optimum is at 0% audience, **don't**. |
 | "What audience size should we target?" | Optimal cutoff from the decision curve. Read off `prob_churn` threshold from the ranked CSV. |
 | "What's the campaign worth?" | Net value at the optimum, scales linearly with user count. |
-| "What success rate do we need to clear?" | The break-even point on the decision curve (~10% for the locked $1/$10 economics). |
+| "What success rate do we need to clear?" | The break-even point on the decision curve (~10% for the assumed $1/$10 economics). |
 | "What if our cost or LTV assumptions are wrong?" | Re-run the decision-curve script with new constants; re-read the optimum. |
 
 ### 3.4 Operational output
@@ -262,10 +262,9 @@ into a campaign pipeline.
 These are load-bearing — without them the dollar numbers above are misleading.
 
 1. **Unit economics are assumed, not measured.** `$1/contact` and
-   `$10/save` come from the locked plan ([README.md](README.md) §
-   Locked decisions), as a sensitivity-analysis convention. Real LTV +
-   real channel cost will move the numbers but the *shape* of the
-   decision curves doesn't change.
+   `$10/save` are sensitivity-analysis assumptions for this writeup, not
+   real LTV or channel cost. Real numbers will shift the absolute dollar
+   values but the *shape* of the decision curves doesn't change.
 
 2. **Intervention success rate is a model parameter, not data.** We
    don't have a holdout group of "users who would have churned but
