@@ -15,11 +15,14 @@ from ..data.schema import ID_COL
 from ..models.baselines import SklearnHandle
 from ..models.interface import ModelHandle
 from ..models.tabular_mlp import TabularMLPHandle
+from ..training.calibration import ScoreCalibrator
 
 logger = logging.getLogger(__name__)
 
 
-def load_run(run_dir: str | Path) -> tuple[ModelHandle, object, dict]:
+def load_run(
+    run_dir: str | Path,
+) -> tuple[ModelHandle, object, ScoreCalibrator | None, dict]:
     run_dir = Path(run_dir)
     schema = json.loads((run_dir / "feature_schema.json").read_text())
     pre = joblib.load(run_dir / "preprocessor.pkl")
@@ -31,7 +34,10 @@ def load_run(run_dir: str | Path) -> tuple[ModelHandle, object, dict]:
         handle: ModelHandle = TabularMLPHandle.load(model_path)
     else:
         handle = SklearnHandle.load(model_path)
-    return handle, pre, schema
+
+    cal_path = run_dir / "calibrator.pkl"
+    calibrator = ScoreCalibrator.load(cal_path) if cal_path.exists() else None
+    return handle, pre, calibrator, schema
 
 
 def score(
@@ -45,12 +51,13 @@ def score(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    handle, pre, schema = load_run(run_dir)
+    handle, pre, calibrator, schema = load_run(run_dir)
 
     df = load_csv(input_path, require_target=False)
     feature_cols = schema["feature_columns"]
     X = np.asarray(pre.transform(df[feature_cols]), dtype=np.float32)
     scores = handle.predict_proba(X)
+    prob_churn = calibrator.transform(scores) if calibrator is not None else None
 
     threshold_path = run_dir / "threshold.json"
     threshold = None
@@ -58,6 +65,8 @@ def score(
         threshold = float(json.loads(threshold_path.read_text())["threshold"])
 
     out = pd.DataFrame({ID_COL: df[ID_COL].to_numpy(), "score": scores})
+    if prob_churn is not None:
+        out["prob_churn"] = prob_churn
     out = out.sort_values("score", ascending=False).reset_index(drop=True)
     out["rank"] = np.arange(1, len(out) + 1)
     if threshold is not None:
