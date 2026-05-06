@@ -102,6 +102,23 @@ All four model families land within ~1 PR-AUC point of each other:
 
 ![Model comparison](report/figures/model_comparison.png)
 
+#### What we're measuring (and why not accuracy)
+
+At ~62% churn prevalence, a "predict churn for everyone" model gets 62%
+accuracy and is operationally useless. Marketing doesn't care about
+average correctness — it cares about *who's most at risk* (a ranking
+question) and *whether the score reads as a probability* (a calibration
+question). The four metrics below answer those, in order:
+
+| Metric | What it measures | Range / baseline | How to read the table |
+|---|---|---|---|
+| **PR-AUC** | Precision-recall area-under-curve. Summarizes ranking quality across every possible audience-size cutoff, weighted toward the minority (churn) class. **The headline metric.** | 0–1; random ranking ≈ prevalence (0.62) | All four models cluster at 0.93–0.94 — well above the 0.62 random-ranking baseline. The 0.011 spread between best and worst is real but operationally negligible. |
+| **ROC-AUC** | Probability that a randomly picked churner is scored higher than a randomly picked non-churner. Familiar; understates problems under class imbalance because easy majority-class examples dilute the denominator. Reported for context. | 0.5 (random) – 1 (perfect) | 0.90–0.91 means the model orders ~91% of churner/non-churner pairs correctly. |
+| **lift@10pct** | Concentration ratio: churners-in-top-10% ÷ churners-in-a-random-10%. **The most operationally direct metric** — directly answers "if I outreach to 10% of users, how much better is the model than a coin flip?" | 1.0 = no signal; max ≈ 1 / prevalence = 1.61 at 10% audience | 1.57–1.59 means the model concentrates churn ~1.6× into the top decile — close to the 1.61 ceiling. There's no headroom left to chase. |
+| **Brier** (lower better) | Mean squared error between predicted probability and the true 0/1 outcome. Combines **calibration** (do 0.7 scores actually mean ~70% positives?) with **discrimination** (does the model separate the classes?). | 0–1; "predict prevalence for everyone" ≈ 0.235; perfect = 0 | 0.112–0.120 — well below the 0.235 baseline and tightly clustered. RF best, LR slightly worse. |
+
+#### The numbers
+
 | Metric | Random Forest | LightGBM | MLP | Logistic Reg. |
 |---|---:|---:|---:|---:|
 | **PR-AUC** | **0.940** | 0.939 | 0.935 | 0.929 |
