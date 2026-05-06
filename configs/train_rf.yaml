@@ -1,0 +1,15 @@
+model_type: rf
+seed: 42
+data:
+  path: Processed_data/df_model_final.csv
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+params:
+  n_estimators: 300
+  min_samples_leaf: 5
+threshold:
+  policy: top_k
+  top_k_fraction: 0.10
+mlflow_experiment: musicbox_churn

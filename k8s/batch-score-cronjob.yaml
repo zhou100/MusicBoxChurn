@@ -1,0 +1,83 @@
+# Batch-scoring CronJob.
+#
+# Schedule: daily at 06:00 UTC. Adjust to your operational window.
+#
+# This manifest is the *shape* of a production deploy, not turnkey:
+#   - The image reference (REGISTRY/musicbox-churn:TAG) must be pushed to
+#     a registry your cluster can pull from.
+#   - Volume mounts use PVCs as a stand-in. In a real deploy, swap to an
+#     init container that pulls the trained run from object storage
+#     (S3/GCS) into /app/artifacts/run, and a sidecar / post-step that
+#     uploads /app/output to object storage.
+#   - Resources are sized for ~58k rows × 45 features. Bump for larger
+#     scoring sets.
+#   - The model run dir is treated as immutable — promote a new run by
+#     re-tagging the image (or pointing the init container at a new path)
+#     so deploys are auditable.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: musicbox-churn-batch-score
+  labels:
+    app: musicbox-churn
+    component: batch-score
+spec:
+  schedule: "0 6 * * *"           # daily 06:00 UTC
+  concurrencyPolicy: Forbid       # never overlap runs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 1800
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: musicbox-churn
+            component: batch-score
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: batch-score
+              image: REGISTRY/musicbox-churn:TAG
+              imagePullPolicy: IfNotPresent
+              args:
+                - python
+                - -m
+                - musicbox_churn.inference.batch_score
+                - --run-dir
+                - /app/artifacts/run
+                - --input
+                - /app/input/scoring_input.csv
+                - --output-dir
+                - /app/output
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: run-dir
+                  mountPath: /app/artifacts/run
+                  readOnly: true
+                - name: input
+                  mountPath: /app/input
+                  readOnly: true
+                - name: output
+                  mountPath: /app/output
+              env:
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+          volumes:
+            - name: run-dir
+              persistentVolumeClaim:
+                claimName: musicbox-churn-run            # holds artifacts/<run>/
+            - name: input
+              persistentVolumeClaim:
+                claimName: musicbox-churn-input          # daily scoring CSV
+            - name: output
+              persistentVolumeClaim:
+                claimName: musicbox-churn-output         # ranked predictions

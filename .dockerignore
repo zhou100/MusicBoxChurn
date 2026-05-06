@@ -1,0 +1,26 @@
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+build
+dist
+*.egg-info
+
+# Heavy local state — mount these in instead of baking them into the image
+artifacts/
+mlruns/
+output/
+Processed_data/
+img/
+*.ipynb
+*.html
+*.Rproj
+.Rhistory
+.Rproj.user

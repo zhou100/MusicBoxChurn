@@ -1,0 +1,18 @@
+model_type: mlp
+seed: 42
+data:
+  path: Processed_data/df_model_final.csv
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+params:
+  hidden: [128, 64]
+  dropout: 0.2
+  lr: 0.001
+  weight_decay: 0.00001
+  epochs: 20
+  batch_size: 512
+threshold:
+  policy: max_f1
+mlflow_experiment: musicbox_churn
