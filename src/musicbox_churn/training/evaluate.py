@@ -4,7 +4,7 @@ import numpy as np
 
 from ..models.interface import ModelHandle
 from .calibration import reliability_data
-from .metrics import compute_metrics
+from .metrics import compute_metrics, slice_metrics
 
 
 def evaluate(
@@ -13,11 +13,15 @@ def evaluate(
     y: np.ndarray,
     *,
     top_k_fractions: tuple[float, ...] = (0.05, 0.10, 0.20),
+    slices: dict[str, np.ndarray] | None = None,
 ) -> dict:
     scores = handle.predict_proba(X)
     metrics = compute_metrics(y, scores, top_k_fractions=top_k_fractions)
     rel = reliability_data(y, scores, n_bins=10)
-    return {"metrics": metrics, "reliability": rel, "scores_summary": _summary(scores)}
+    out = {"metrics": metrics, "reliability": rel, "scores_summary": _summary(scores)}
+    if slices:
+        out["slices"] = {name: slice_metrics(y, scores, g) for name, g in slices.items()}
+    return out
 
 
 def _summary(scores: np.ndarray) -> dict[str, float]:

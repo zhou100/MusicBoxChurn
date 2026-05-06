@@ -134,8 +134,10 @@ def train_from_config(cfg: dict[str, Any]) -> Path:
     handle.fit(X_train, y_train)
     fit_seconds = time.time() - t0
 
-    val_eval = evaluate(handle, X_val, y_val)
-    test_eval = evaluate(handle, X_test, y_test)
+    val_slices = {"device_type": X_val_raw["device_type"].to_numpy()}
+    test_slices = {"device_type": X_test_raw["device_type"].to_numpy()}
+    val_eval = evaluate(handle, X_val, y_val, slices=val_slices)
+    test_eval = evaluate(handle, X_test, y_test, slices=test_slices)
 
     # Calibration: fit on val (raw_score, label); evaluate on val + test.
     cal_cfg = cfg.get("calibration", {"method": "isotonic"})
