@@ -397,3 +397,105 @@ make batch-score RUN_DIR=$(ls -td artifacts/gbm_* | head -1) \
 Each run dir is self-contained and portable — `model.{pkl,pt}`,
 `preprocessor.pkl`, `calibrator.pkl`, `metrics.json`, `threshold.json`,
 `feature_schema.json`, `model_card.md`, `evaluation_report.md`.
+
+---
+
+## 6 · Engineering hygiene — CI and ruff
+
+A decision system is only useful if it actually runs on someone else's
+machine. This section is the boring-but-load-bearing layer that catches
+"works on my laptop" before it becomes "works nowhere".
+
+### 6.1 Why CI
+
+Every push to `master` and every PR triggers
+[.github/workflows/ci.yml](.github/workflows/ci.yml). Two parallel jobs:
+
+- **lint** (~10 s) — `ruff check` + `ruff format --check`
+- **test** (~2 min) — `pytest -q` on Python 3.11 with the CPU torch wheel
+
+The pytest job runs **45 tests including end-to-end training smokes** for
+LR / GBM / MLP on synthetic fixtures, so it catches both surface
+regressions (an import broke) and behavioral ones (the LR fit no longer
+converges, the calibrator output shape changed, batch_score produces
+wrong columns).
+
+What this buys, concretely:
+
+- **Reproducibility on a clean machine.** The CI runner installs from
+  `pyproject.toml` exactly as a new contributor would. If the install
+  step fails, your dependency declarations are wrong — better to find
+  out in CI than when the new hire's laptop sits idle for two hours.
+- **Catch behavioral regressions in PRs.** A change to `splits.py` that
+  shifts the random_state plumbing will fail `test_split_is_deterministic`
+  before merge. Without CI, someone has to remember to run `make test`
+  locally; with CI, the gate is structural.
+- **Honest README badge.** The green/red icon at the top of the README
+  is wired to the latest master run. It's not aspirational — it
+  reflects reality every time master moves.
+
+### 6.2 Why ruff (and not the usual 3-tool stack)
+
+Most Python projects run `black` (format) + `isort` (imports) + `flake8`
+(lint), with `pylint` or `mypy` sometimes piled on top. Ruff replaces
+all of those with one binary written in Rust:
+
+- **One tool, one config.** `ruff check` does what flake8 + isort + many
+  pylint rules do. `ruff format` is a drop-in for black. Both are
+  configured in [pyproject.toml § `[tool.ruff]`](pyproject.toml).
+- **~10–100× faster** than the equivalents it replaces. On this repo,
+  full lint over 37 files runs in <1 s.
+- **Auto-fix what's safe.** `ruff check --fix` rewrote ~15 issues
+  during this project's CI cleanup pass — unused imports, `zip()`
+  without `strict=`, and similar mechanical fixes — without anyone
+  reviewing them line by line.
+- **Catches the bugs that matter.** The rules we enabled (`E`, `F`, `I`,
+  `B`, `UP`) include things like `F841` (unused variable — almost
+  always a bug), `B905` (`zip()` silently truncating mismatched
+  iterables — once cost a real outage somewhere), and `E501` (long
+  lines — readability tax).
+
+What we deliberately turned off:
+
+- `UP017` (use `datetime.UTC`) — 3.11+ only. The project requires 3.11,
+  but local dev on the author's machine sometimes runs 3.10. Cheaper to
+  skip the modernization than to break local iteration.
+- `UP042` (use `enum.StrEnum`) — same reason.
+
+### 6.3 How to interpret a CI run
+
+The README badge links straight to the latest master run. From the
+Actions tab or the CLI, you'll see one of three states:
+
+| Badge / status | What it means | What to do |
+|---|---|---|
+| 🟢 green | Both jobs passed on the latest commit. | Nothing. The pipeline runs end-to-end on a clean machine, all 45 tests pass, lint is clean. |
+| 🔴 red — `lint` failed | Formatting or static analysis caught something. The job log shows `<file>:<line>: <code>: <message>`. | `make format` auto-fixes 90% of cases. For real lint errors (unused vars, missing strict=, etc.), the message tells you what's wrong. |
+| 🔴 red — `test` failed | A specific test broke. The log shows the failing test name and traceback. | Reproduce locally with `pytest tests/<file>::<test_name>`. The traceback is the same one you'd see locally. |
+
+Useful CLI shortcuts (from anywhere with `gh` installed):
+
+```bash
+gh run list --workflow=ci.yml --limit 5      # recent runs across master + PRs
+gh run view <run-id> --log                   # full log of one run
+gh run view <run-id> --log-failed            # only the failing steps
+gh run watch <run-id>                        # tail a live run
+```
+
+### 6.4 What CI deliberately does not cover
+
+These are reasonable next-rung items, deferred for now ([TODOS.md](TODOS.md)):
+
+- **No integration test against real `Processed_data/`.** All training
+  smokes use synthetic fixtures. The real CSV isn't shipped to CI
+  because it's a sample of a private-ish dataset. Reasonable next step:
+  store it in S3, gate full-data smoke on a manual workflow_dispatch.
+- **No Docker build verification.** The Dockerfile is hand-verified once
+  per change (see [§ 5](#5--how-to-reproduce) reproduce). Could be added
+  as a third CI job at the cost of ~3 min extra per run.
+- **No benchmark regression check.** PR-AUC could quietly drop from 0.94
+  to 0.85 and CI wouldn't notice as long as the smoke trains *something*.
+  A real production setup would log a baseline metric and fail CI on
+  >X% regression.
+- **No security scanning.** No `pip-audit`, no SBOM, no dependency
+  vulnerability check. One-line add when needed; not load-bearing here.

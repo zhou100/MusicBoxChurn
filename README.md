@@ -179,3 +179,27 @@ extras/      doc-only stubs (Feast feature contract); core never imports from he
 
 Container build: `make docker-build` produces a CPU image that scores
 57k users in ~1s; `make docker-batch-score` mirrors the k8s mount layout.
+
+---
+
+## Engineering hygiene
+
+[![CI](https://github.com/zhou100/MusicBoxChurn/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/zhou100/MusicBoxChurn/actions/workflows/ci.yml)
+
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): every push
+to master and every PR runs two parallel jobs — `ruff check` + `ruff format --check`
+(~10 s) and `pytest -q` on Python 3.11 (~2 min). The pytest job runs all
+45 tests including end-to-end LR/GBM/MLP training smokes on synthetic
+fixtures, so it catches both surface regressions and behavioral ones.
+Green badge = "this still works on a clean machine."
+
+**ruff** replaces the typical 3-tool Python stack (black + isort + flake8)
+with one binary: ~10× faster, one config block in [pyproject.toml](pyproject.toml),
+auto-fixes formatting and most lint violations. `make format` for the
+fix loop, `make lint` for the check loop.
+
+What's deliberately not in CI: full-data integration test (uses
+synthetic fixtures), Docker build verification, benchmark regressions,
+security scanning. Reasonable next-rung items, not load-bearing today.
+Full breakdown including how to interpret a red badge in
+[REPORT.md § 6](REPORT.md#6--engineering-hygiene--ci-and-ruff).
